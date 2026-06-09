@@ -1,586 +1,164 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Active Stores — Monthly Dynamics</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #f5f5f4;
-      --surface: #ffffff;
-      --border: #e5e5e4;
-      --text-primary: #1a1a18;
-      --text-secondary: #6b6b66;
-      --text-tertiary: #9b9b96;
-      --accent: #1a6b43;
-      --accent-light: #e8f5ee;
-      --ent: #2563c0;
-      --ent-light: #dbeafe;
-      --smb: #d97706;
-      --smb-light: #fef3c7;
-      --radius: 10px;
-      --radius-sm: 6px;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text-primary);
-      min-height: 100vh;
-      padding: 0 0 60px;
-    }
-
-    /* ── Header ── */
-    .page-header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 28px 40px 24px;
-    }
-    .page-header h1 {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-    }
-    .page-header .subtitle {
-      font-size: 13px;
-      color: var(--text-secondary);
-      margin-top: 4px;
-    }
-    .header-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 14px;
-    }
-    .tag {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 3px 10px;
-      border-radius: 99px;
-      border: 1px solid var(--border);
-      color: var(--text-secondary);
-      background: var(--bg);
-    }
-
-    /* ── Layout ── */
-    .container { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
-
-    .section { margin-top: 36px; }
-    .section-title {
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--text-secondary);
-      margin-bottom: 16px;
-    }
-
-    /* ── KPI Grid ── */
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-    }
-    .kpi-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px 22px;
-    }
-    .kpi-card.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .kpi-card.accent .kpi-label { color: rgba(255,255,255,0.7); }
-    .kpi-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-    .kpi-value {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -1px;
-      line-height: 1;
-    }
-    .kpi-sub {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-top: 6px;
-    }
-    .kpi-card.accent .kpi-sub { color: rgba(255,255,255,0.65); }
-
-    /* ── Charts Row ── */
-    .charts-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    .chart-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 22px 24px;
-    }
-    .chart-card h3 {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .chart-card .chart-desc {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 18px;
-    }
-    .chart-canvas-wrap { position: relative; height: 220px; }
-
-    /* ── Month Tabs ── */
-    .tabs {
-      display: flex;
-      gap: 4px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 0;
-    }
-    .tab-btn {
-      padding: 10px 20px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
-      transition: color 0.15s;
-      margin-bottom: -1px;
-    }
-    .tab-btn:hover { color: var(--text-primary); }
-    .tab-btn.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-      font-weight: 600;
-    }
-
-    /* ── Month Panel ── */
-    .month-panel { display: none; padding-top: 20px; }
-    .month-panel.active { display: block; }
-
-    .month-summary-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-    .mini-stat {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 14px 16px;
-    }
-    .mini-stat.ent { border-left: 3px solid var(--ent); }
-    .mini-stat.smb { border-left: 3px solid var(--smb); }
-    .mini-stat.green { border-left: 3px solid var(--accent); }
-    .mini-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
-    }
-    .mini-value {
-      font-size: 24px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-    }
-    .mini-desc { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
-
-    /* ── Two-col brand section ── */
-    .brands-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-
-    .brand-section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-    .brand-section-header {
-      padding: 14px 18px 12px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .brand-section-header h4 {
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .segment-pill {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 3px 10px;
-      border-radius: 99px;
-    }
-    .segment-pill.ent { background: var(--ent-light); color: var(--ent); }
-    .segment-pill.smb { background: var(--smb-light); color: var(--smb); }
-
-    .brand-list { padding: 8px 0; }
-    .brand-row {
-      display: flex;
-      align-items: center;
-      padding: 7px 18px;
-      gap: 10px;
-      transition: background 0.1s;
-    }
-    .brand-row:hover { background: var(--bg); }
-    .brand-rank {
-      font-size: 11px;
-      color: var(--text-tertiary);
-      width: 18px;
-      text-align: right;
-      flex-shrink: 0;
-    }
-    .brand-name { flex: 1; font-size: 13px; font-weight: 500; }
-    .brand-bar-wrap {
-      flex: 0 0 100px;
-      height: 6px;
-      background: var(--bg);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    .brand-bar { height: 100%; border-radius: 3px; }
-    .brand-bar.ent { background: var(--ent); }
-    .brand-bar.smb { background: var(--smb); }
-    .brand-count {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      width: 36px;
-      text-align: right;
-    }
-    .brand-count.new {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.3px;
-      text-transform: uppercase;
-      padding: 2px 7px;
-      border-radius: 99px;
-      background: var(--accent-light);
-      color: var(--accent);
-      width: auto;
-    }
-
-    /* all brands table */
-    .all-brands-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      margin-top: 16px;
-    }
-    .all-brands-header {
-      padding: 14px 18px 12px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .all-brands-header h4 { font-size: 13px; font-weight: 600; }
-
-    table.brands-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    table.brands-table thead th {
-      padding: 9px 18px;
-      text-align: left;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-    }
-    table.brands-table tbody td {
-      padding: 8px 18px;
-      border-bottom: 1px solid var(--bg);
-      vertical-align: middle;
-    }
-    table.brands-table tbody tr:last-child td { border-bottom: none; }
-    table.brands-table tbody tr:hover td { background: var(--bg); }
-
-    .badge {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      padding: 2px 8px;
-      border-radius: 99px;
-    }
-    .badge.ent { background: var(--ent-light); color: var(--ent); }
-    .badge.smb { background: var(--smb-light); color: var(--smb); }
-    .badge.new-brand { background: var(--accent-light); color: var(--accent); }
-
-    /* note */
-    .note {
-      font-size: 12px;
-      color: var(--text-secondary);
-      padding: 14px 18px;
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius-sm);
-      margin-top: 12px;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 32px;
-      color: var(--text-secondary);
-      font-size: 13px;
-    }
-
-    /* ── Main page nav ── */
-    .main-nav {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      gap: 0;
-    }
-    .main-nav-btn {
-      padding: 13px 28px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
-      transition: color 0.15s;
-      margin-bottom: -1px;
-    }
-    .main-nav-btn:hover { color: var(--text-primary); }
-    .main-nav-btn.active {
-      color: var(--accent);
-      border-bottom-color: var(--accent);
-      font-weight: 600;
-    }
-
-    /* ── Views ── */
-    .view { display: none; }
-    .view.active { display: block; }
-
-    /* ── Partner view controls ── */
-    .partner-controls {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
-    .partner-search {
-      flex: 1;
-      min-width: 200px;
-      max-width: 320px;
-      padding: 8px 14px;
-      font-size: 13px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--surface);
-      color: var(--text-primary);
-      outline: none;
-    }
-    .partner-search:focus { border-color: var(--accent); }
-    .filter-group { display: flex; gap: 4px; }
-    .filter-btn {
-      padding: 7px 14px;
-      font-size: 12px;
-      font-weight: 600;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--surface);
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.12s;
-    }
-    .filter-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
-    .filter-btn.active-all { background: var(--text-primary); border-color: var(--text-primary); color: #fff; }
-    .filter-btn.active-ent { background: var(--ent); border-color: var(--ent); color: #fff; }
-    .filter-btn.active-smb { background: var(--smb); border-color: var(--smb); color: #fff; }
-    .sort-select {
-      padding: 7px 12px;
-      font-size: 12px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--surface);
-      color: var(--text-primary);
-      cursor: pointer;
-      outline: none;
-    }
-    .partner-count {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-left: auto;
-    }
-
-    /* ── Partner table ── */
-    .partner-table-wrap {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-    table.partner-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    table.partner-table thead th {
-      padding: 10px 14px;
-      text-align: left;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-      white-space: nowrap;
-      cursor: pointer;
-      user-select: none;
-    }
-    table.partner-table thead th:hover { color: var(--text-primary); }
-    table.partner-table thead th.sorted { color: var(--accent); }
-    table.partner-table thead th .sort-arrow { opacity: 0.4; font-size: 9px; margin-left: 3px; }
-    table.partner-table thead th.sorted .sort-arrow { opacity: 1; }
-    table.partner-table tbody td {
-      padding: 8px 14px;
-      border-bottom: 1px solid var(--bg);
-      vertical-align: middle;
-      white-space: nowrap;
-    }
-    table.partner-table tbody tr:last-child td { border-bottom: none; }
-    table.partner-table tbody tr:hover td { background: #fafaf9; }
-
-    .partner-name { font-weight: 500; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-    .num-cell { text-align: right; font-variant-numeric: tabular-nums; min-width: 42px; }
-    .num-cell.zero { color: var(--text-tertiary); }
-    .delta {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 700;
-      margin-left: 3px;
-    }
-    .delta.up { color: #16a34a; }
-    .delta.down { color: #dc2626; }
-    .delta.same { color: var(--text-tertiary); }
-
-    /* sparkline SVG */
-    .spark { display: block; }
-
-    /* status badges */
-    .status-badge {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      padding: 2px 8px;
-      border-radius: 99px;
-    }
-    .status-badge.growing    { background: #dcfce7; color: #16a34a; }
-    .status-badge.declining  { background: #fee2e2; color: #dc2626; }
-    .status-badge.stable     { background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border); }
-    .status-badge.new        { background: var(--accent-light); color: var(--accent); }
-    .status-badge.churned    { background: #fef3c7; color: #b45309; }
-
-    .partner-table-footer {
-      padding: 10px 14px;
-      font-size: 11px;
-      color: var(--text-secondary);
-      border-top: 1px solid var(--border);
-      background: var(--bg);
-    }
-
-    /* ── Monthly totals strip ── */
-    .monthly-totals {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .month-total-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .month-total-card.highlight { border-color: var(--accent); }
-    .mtc-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-    }
-    .mtc-row {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-    .mtc-total {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-    }
-    .mtc-added {
-      font-size: 11px;
-      font-weight: 700;
-      padding: 1px 7px;
-      border-radius: 99px;
-    }
-    .mtc-added.pos { background: #dcfce7; color: #16a34a; }
-    .mtc-added.neg { background: #fee2e2; color: #dc2626; }
-    .mtc-added.neu { background: var(--bg); color: var(--text-secondary); }
-    .mtc-sub {
-      font-size: 11px;
-      color: var(--text-secondary);
-    }
-
-    @media (max-width: 900px) {
-      .container { padding: 0 20px; }
-      .page-header { padding: 20px; }
-      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-      .charts-row { grid-template-columns: 1fr; }
-      .brands-grid { grid-template-columns: 1fr; }
-      .month-summary-grid { grid-template-columns: repeat(3, 1fr); }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Active Stores — Monthly Dynamics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#f5f5f4; --surface:#fff; --border:#e5e5e4;
+  --text-primary:#1a1a18; --text-secondary:#6b6b66; --text-tertiary:#9b9b96;
+  --accent:#1a6b43; --accent-light:#e8f5ee;
+  --ent:#2563c0; --ent-light:#dbeafe;
+  --mm:#7c3aed; --mm-light:#ede9fe;
+  --smb:#d97706; --smb-light:#fef3c7;
+  --radius:10px; --radius-sm:6px;
+}
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text-primary); min-height:100vh; padding:0 0 60px; }
+.page-header { background:var(--surface); border-bottom:1px solid var(--border); padding:28px 40px 24px; }
+.page-header h1 { font-size:22px; font-weight:700; letter-spacing:-0.3px; }
+.page-header .subtitle { font-size:13px; color:var(--text-secondary); margin-top:4px; }
+.header-meta { display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap; }
+.tag { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; padding:3px 10px; border-radius:99px; border:1px solid var(--border); color:var(--text-secondary); background:var(--bg); }
+.container { max-width:1200px; margin:0 auto; padding:0 40px; }
+.section { margin-top:36px; }
+.section-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-secondary); margin-bottom:16px; }
+.kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; }
+.kpi-card.accent { background:var(--accent); border-color:var(--accent); color:#fff; }
+.kpi-card.accent .kpi-label { color:rgba(255,255,255,0.7); }
+.kpi-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); margin-bottom:8px; }
+.kpi-value { font-size:32px; font-weight:700; letter-spacing:-1px; line-height:1; }
+.kpi-sub { font-size:12px; color:var(--text-secondary); margin-top:6px; }
+.kpi-card.accent .kpi-sub { color:rgba(255,255,255,0.65); }
+.charts-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; }
+.chart-card h3 { font-size:14px; font-weight:600; margin-bottom:4px; }
+.chart-card .chart-desc { font-size:12px; color:var(--text-secondary); margin-bottom:18px; }
+.chart-canvas-wrap { position:relative; height:220px; }
+.tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.tab-btn { padding:10px 20px; font-size:13px; font-weight:500; color:var(--text-secondary); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s; margin-bottom:-1px; }
+.tab-btn:hover { color:var(--text-primary); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.month-panel { display:none; padding-top:20px; }
+.month-panel.active { display:block; }
+.month-summary-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:20px; }
+.mini-stat { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 16px; }
+.mini-stat.ent { border-left:3px solid var(--ent); }
+.mini-stat.mm { border-left:3px solid var(--mm); }
+.mini-stat.smb { border-left:3px solid var(--smb); }
+.mini-stat.green { border-left:3px solid var(--accent); }
+.mini-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); margin-bottom:6px; }
+.mini-value { font-size:24px; font-weight:700; letter-spacing:-0.5px; }
+.mini-desc { font-size:11px; color:var(--text-secondary); margin-top:3px; }
+.brands-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.brands-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.brand-section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.brand-section-header { padding:14px 18px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.brand-section-header h4 { font-size:13px; font-weight:600; }
+.segment-pill { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; padding:3px 10px; border-radius:99px; }
+.segment-pill.ent { background:var(--ent-light); color:var(--ent); }
+.segment-pill.mm { background:var(--mm-light); color:var(--mm); }
+.segment-pill.smb { background:var(--smb-light); color:var(--smb); }
+.brand-list { padding:8px 0; }
+.brand-row { display:flex; align-items:center; padding:7px 18px; gap:10px; transition:background .1s; }
+.brand-row:hover { background:var(--bg); }
+.brand-rank { font-size:11px; color:var(--text-tertiary); width:18px; text-align:right; flex-shrink:0; }
+.brand-name { flex:1; font-size:13px; font-weight:500; }
+.brand-bar-wrap { flex:0 0 80px; height:6px; background:var(--bg); border-radius:3px; overflow:hidden; }
+.brand-bar { height:100%; border-radius:3px; }
+.brand-bar.ent { background:var(--ent); }
+.brand-bar.mm { background:var(--mm); }
+.brand-bar.smb { background:var(--smb); }
+.brand-count { font-size:12px; font-weight:600; color:var(--text-secondary); width:36px; text-align:right; }
+.all-brands-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-top:16px; }
+.all-brands-header { padding:14px 18px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+.all-brands-header h4 { font-size:13px; font-weight:600; }
+table.brands-table { width:100%; border-collapse:collapse; font-size:12px; }
+table.brands-table thead th { padding:9px 18px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); border-bottom:1px solid var(--border); background:var(--bg); }
+table.brands-table tbody td { padding:8px 18px; border-bottom:1px solid var(--bg); vertical-align:middle; }
+table.brands-table tbody tr:last-child td { border-bottom:none; }
+table.brands-table tbody tr:hover td { background:var(--bg); }
+.badge { display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:99px; }
+.badge.ent { background:var(--ent-light); color:var(--ent); }
+.badge.mm { background:var(--mm-light); color:var(--mm); }
+.badge.smb { background:var(--smb-light); color:var(--smb); }
+.badge.new-brand { background:var(--accent-light); color:var(--accent); }
+.note { font-size:12px; color:var(--text-secondary); padding:14px 18px; background:#fffbeb; border:1px solid #fde68a; border-radius:var(--radius-sm); margin-top:12px; }
+.empty-state { text-align:center; padding:32px; color:var(--text-secondary); font-size:13px; }
+.main-nav { background:var(--surface); border-bottom:1px solid var(--border); display:flex; }
+.main-nav-btn { padding:13px 28px; font-size:13px; font-weight:500; color:var(--text-secondary); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; transition:color .15s; margin-bottom:-1px; }
+.main-nav-btn:hover { color:var(--text-primary); }
+.main-nav-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.view { display:none; }
+.view.active { display:block; }
+.partner-controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.partner-search { flex:1; min-width:200px; max-width:320px; padding:8px 14px; font-size:13px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:var(--text-primary); outline:none; }
+.partner-search:focus { border-color:var(--accent); }
+.filter-group { display:flex; gap:4px; }
+.filter-btn { padding:7px 14px; font-size:12px; font-weight:600; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:var(--text-secondary); cursor:pointer; transition:all .12s; }
+.filter-btn:hover { border-color:var(--text-secondary); color:var(--text-primary); }
+.filter-btn.active-all { background:var(--text-primary); border-color:var(--text-primary); color:#fff; }
+.filter-btn.active-ent { background:var(--ent); border-color:var(--ent); color:#fff; }
+.filter-btn.active-mm { background:var(--mm); border-color:var(--mm); color:#fff; }
+.filter-btn.active-smb { background:var(--smb); border-color:var(--smb); color:#fff; }
+.sort-select { padding:7px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:var(--text-primary); cursor:pointer; outline:none; }
+.partner-count { font-size:12px; color:var(--text-secondary); margin-left:auto; }
+.partner-table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+table.partner-table { width:100%; border-collapse:collapse; font-size:12px; }
+table.partner-table thead th { padding:10px 14px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); border-bottom:1px solid var(--border); background:var(--bg); white-space:nowrap; cursor:pointer; user-select:none; }
+table.partner-table thead th:hover { color:var(--text-primary); }
+table.partner-table thead th.sorted { color:var(--accent); }
+table.partner-table thead th .sort-arrow { opacity:0.4; font-size:9px; margin-left:3px; }
+table.partner-table thead th.sorted .sort-arrow { opacity:1; }
+table.partner-table tbody td { padding:8px 14px; border-bottom:1px solid var(--bg); vertical-align:middle; white-space:nowrap; }
+table.partner-table tbody tr:last-child td { border-bottom:none; }
+table.partner-table tbody tr:hover td { background:#fafaf9; }
+.partner-name { font-weight:500; font-size:13px; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+.num-cell { text-align:right; font-variant-numeric:tabular-nums; min-width:42px; }
+.num-cell.zero { color:var(--text-tertiary); }
+.delta { display:inline-block; font-size:10px; font-weight:700; margin-left:3px; }
+.delta.up { color:#16a34a; }
+.delta.down { color:#dc2626; }
+.spark { display:block; }
+.status-badge { display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:99px; }
+.status-badge.growing { background:#dcfce7; color:#16a34a; }
+.status-badge.declining { background:#fee2e2; color:#dc2626; }
+.status-badge.stable { background:var(--bg); color:var(--text-secondary); border:1px solid var(--border); }
+.status-badge.new { background:var(--accent-light); color:var(--accent); }
+.status-badge.churned { background:#fef3c7; color:#b45309; }
+.partner-table-footer { padding:10px 14px; font-size:11px; color:var(--text-secondary); border-top:1px solid var(--border); background:var(--bg); }
+.monthly-totals { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:12px; }
+.month-total-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 16px; display:flex; flex-direction:column; gap:4px; }
+.month-total-card.highlight { border-color:var(--accent); }
+.mtc-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); }
+.mtc-row { display:flex; align-items:baseline; gap:8px; }
+.mtc-total { font-size:22px; font-weight:700; letter-spacing:-0.5px; }
+.mtc-added { font-size:11px; font-weight:700; padding:1px 7px; border-radius:99px; }
+.mtc-added.pos { background:#dcfce7; color:#16a34a; }
+.mtc-added.neg { background:#fee2e2; color:#dc2626; }
+.mtc-added.neu { background:var(--bg); color:var(--text-secondary); }
+.mtc-sub { font-size:11px; color:var(--text-secondary); }
+@media (max-width:900px) {
+  .container { padding:0 20px; }
+  .page-header { padding:20px; }
+  .kpi-grid { grid-template-columns:repeat(2,1fr); }
+  .charts-row, .brands-grid, .brands-grid-3 { grid-template-columns:1fr; }
+  .month-summary-grid { grid-template-columns:repeat(3,1fr); }
+}
+</style>
 </head>
 <body>
-
 <div class="page-header">
   <div class="container">
     <h1>Active Stores — Monthly Dynamics</h1>
-    <p class="subtitle">New store openings, partner segmentation, and brand tracking · Ukraine · Jan – Jun 2026</p>
+    <p class="subtitle">New store openings, business-segment breakdown, and brand tracking · Ukraine · Jan – Jun 2026</p>
     <div class="header-meta">
       <span class="tag">Bolt Store</span>
-      <span class="tag">ENT &amp; SMB</span>
+      <span class="tag">ENT · MM · SMB</span>
+      <span class="tag">Business Segment</span>
       <span class="tag">6 months</span>
       <span class="tag">As of Jun 9, 2026</span>
     </div>
@@ -599,23 +177,23 @@
     <div class="kpi-grid">
       <div class="kpi-card accent">
         <div class="kpi-label">Total Active Stores (May)</div>
-        <div class="kpi-value">1,353</div>
+        <div class="kpi-value">1,449</div>
         <div class="kpi-sub">Peak month so far</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">New Stores Since Feb</div>
-        <div class="kpi-value">461</div>
+        <div class="kpi-value">555</div>
         <div class="kpi-sub">Excl. Jan baseline</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Unique Brands Onboarded</div>
-        <div class="kpi-value">233</div>
-        <div class="kpi-sub">179 at start + 54 new later</div>
+        <div class="kpi-value">246</div>
+        <div class="kpi-sub">182 at start + 64 new later</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">ENT vs SMB Split</div>
-        <div class="kpi-value">72/28</div>
-        <div class="kpi-sub">968 ENT · 385 SMB (May)</div>
+        <div class="kpi-label">Segment Split (May)</div>
+        <div class="kpi-value">62/16/22</div>
+        <div class="kpi-sub">ENT · MM · SMB %</div>
       </div>
     </div>
   </div>
@@ -625,7 +203,7 @@
     <div class="charts-row">
       <div class="chart-card">
         <h3>New Stores per Month</h3>
-        <p class="chart-desc">First-time active stores, split by segment</p>
+        <p class="chart-desc">First-time active stores, split by business segment</p>
         <div class="chart-canvas-wrap"><canvas id="chartNewStores"></canvas></div>
       </div>
       <div class="chart-card">
@@ -646,7 +224,7 @@
     <p class="section-title">Segment Comparison — Full Period</p>
     <div class="charts-row">
       <div class="chart-card">
-        <h3>ENT vs SMB Share of Active Stores</h3>
+        <h3>Segment Share of Active Stores</h3>
         <p class="chart-desc">By month, % of active stores</p>
         <div class="chart-canvas-wrap"><canvas id="chartShare"></canvas></div>
       </div>
@@ -660,22 +238,24 @@
 
   <div class="section">
     <p class="section-title">Top ENT Brands — All Period</p>
-    <div class="all-brands-wrap">
-      <table class="brands-table">
+    <div class="all-brands-wrap"><table class="brands-table">
         <thead><tr><th>#</th><th>Brand</th><th>Peak Active Stores</th><th>May</th><th>Jun (MTD)</th><th>First Seen</th><th>Segment</th></tr></thead>
         <tbody id="topEntBody"></tbody>
-      </table>
-    </div>
+      </table></div>
   </div>
-
+  <div class="section">
+    <p class="section-title">Top MM Brands — All Period</p>
+    <div class="all-brands-wrap"><table class="brands-table">
+        <thead><tr><th>#</th><th>Brand</th><th>Peak Active Stores</th><th>May</th><th>Jun (MTD)</th><th>First Seen</th><th>Segment</th></tr></thead>
+        <tbody id="topMmBody"></tbody>
+      </table></div>
+  </div>
   <div class="section">
     <p class="section-title">Top SMB Brands — All Period</p>
-    <div class="all-brands-wrap">
-      <table class="brands-table">
+    <div class="all-brands-wrap"><table class="brands-table">
         <thead><tr><th>#</th><th>Brand</th><th>Peak Active Stores</th><th>May</th><th>Jun (MTD)</th><th>First Seen</th><th>Segment</th></tr></thead>
         <tbody id="topSmbBody"></tbody>
-      </table>
-    </div>
+      </table></div>
   </div>
 </div>
 </div>
@@ -687,16 +267,17 @@
     <div class="partner-controls">
       <input class="partner-search" type="text" id="partnerSearch" placeholder="Search brand..." oninput="renderPartnerTable()" />
       <div class="filter-group">
-        <button class="filter-btn active-all" id="segAll"  onclick="setSegFilter('all',  this)">All</button>
-        <button class="filter-btn"            id="segEnt"  onclick="setSegFilter('ent',  this)">ENT</button>
-        <button class="filter-btn"            id="segSmb"  onclick="setSegFilter('smb',  this)">SMB</button>
+        <button class="filter-btn active-all" id="segAll" onclick="setSegFilter('all',this)">All</button>
+        <button class="filter-btn" id="segEnt" onclick="setSegFilter('ent',this)">ENT</button>
+        <button class="filter-btn" id="segMm" onclick="setSegFilter('mm',this)">MM</button>
+        <button class="filter-btn" id="segSmb" onclick="setSegFilter('smb',this)">SMB</button>
       </div>
       <div class="filter-group">
-        <button class="filter-btn" id="stAll"       onclick="setStatusFilter('all',      this)">All Status</button>
-        <button class="filter-btn" id="stGrowing"   onclick="setStatusFilter('growing',  this)">Growing</button>
+        <button class="filter-btn" id="stAll" onclick="setStatusFilter('all',this)">All Status</button>
+        <button class="filter-btn" id="stGrowing" onclick="setStatusFilter('growing',this)">Growing</button>
         <button class="filter-btn" id="stDeclining" onclick="setStatusFilter('declining',this)">Declining</button>
-        <button class="filter-btn" id="stNew"       onclick="setStatusFilter('new',      this)">New</button>
-        <button class="filter-btn" id="stChurned"   onclick="setStatusFilter('churned',  this)">Churned</button>
+        <button class="filter-btn" id="stNew" onclick="setStatusFilter('new',this)">New</button>
+        <button class="filter-btn" id="stChurned" onclick="setStatusFilter('churned',this)">Churned</button>
       </div>
       <select class="sort-select" id="partnerSort" onchange="renderPartnerTable()">
         <option value="may">Sort: May (latest full)</option>
@@ -723,13 +304,16 @@
 </div>
 
 <script>
-const DATA = {"monthly": {"jan": {"ent": 675, "smb": 335, "total": 1010}, "feb": {"ent": 727, "smb": 341, "total": 1068}, "mar": {"ent": 870, "smb": 353, "total": 1223}, "apr": {"ent": 927, "smb": 374, "total": 1301}, "may": {"ent": 968, "smb": 385, "total": 1353}, "jun": {"ent": 927, "smb": 355, "total": 1282}}, "newStores": {"jan": {"ent": 660, "smb": 349, "total": 1009}, "feb": {"ent": 64, "smb": 25, "total": 89}, "mar": {"ent": 160, "smb": 35, "total": 195}, "apr": {"ent": 78, "smb": 27, "total": 105}, "may": {"ent": 45, "smb": 25, "total": 70}, "jun": {"ent": 1, "smb": 1, "total": 2}}, "newBrands": {"jan": {"ent": 24, "smb": 155, "total": 179}, "feb": {"ent": 1, "smb": 12, "total": 13}, "mar": {"ent": 3, "smb": 14, "total": 17}, "apr": {"ent": 2, "smb": 13, "total": 15}, "may": {"ent": 2, "smb": 6, "total": 8}, "jun": {"ent": 0, "smb": 1, "total": 1}}, "topNew": {"jan": {"ent": [["BEER MARKET", 150], ["HOP HEY", 149], ["KOPIYKA", 61], ["PYVNA BORODA", 43], ["BEERLAND", 32], ["REMESLO BREWERY", 32], ["WINETIME", 27], ["PYVNE REMESLO", 25], ["KOPIYKA MINI", 22], ["CHEESE&WINE", 20], ["RUKAVYCHKA", 19], ["PYANA VYSHNYA", 13]], "smb": [["ALTBIER", 20], ["CHILL TIME", 18], ["DIMPYVA", 16], ["TOCHKA", 15], ["PIVOBANK", 13], ["LEPRUKON", 10], ["SPRAGA", 8], ["SMOKE KING", 8], ["PYVNA SOVA", 7], ["BEER SOTA", 7], ["MAHAZYN PYVNYY UKRAIINSKYJ KRAFT", 6], ["UMANPIVO", 4]]}, "feb": {"ent": [["NO TABOO", 8]], "smb": [["SUSHI VESLA", 7], ["BEERCRAFT", 1], ["REPTO BOUTIQUE", 1], ["BRO-BEER", 1], ["UKRAINE FLOWERS", 1], ["SURU TA KOVBASU", 1], ["SPAR", 1], ["PRO PYVO", 1], ["MYAS MYAS", 1], ["CAFFEINE GASTRO PUB", 1], ["BEERLAB", 1], ["KVITKA", 1]]}, "mar": {"ent": [["RODYNNA KOVBASKA", 30], ["UMANPYVO BRANDSTORE", 6], ["VAPORS", 1]], "smb": [["BEARS BEER", 11], ["VAPE SHOP KYIV", 8], ["RV-FLOWER", 1], ["FRANICOFFE", 1], ["PIVKO KHM", 1], ["BEER TIME KYIV", 1], ["LAVENDER BY LK", 1], ["DUDKA", 1], ["PYVNA SICH", 1], ["GRAND BEER", 1], ["BRATER", 1], ["MULTI COOK KYIV", 1]]}, "apr": {"ent": [["VARUS", 58], ["VAPERY | VAPE SHOP", 13]], "smb": [["NAPIVFABRYKATY SALATEIRA", 7], ["13GRAM", 4], ["YOSHKIN KIT", 2], ["PYVKO NA PISHCHANOMU", 1], ["GIGI BAR-BOUTIQUEGIGI BAR-BOUTIQUE", 1], ["KHMILNIY BOB", 1], ["BIERWELLE", 1], ["MISTO PIVMARKET", 1], ["PYVO BILYA TEBE", 1], ["FRESH HEAVEN SHOP", 1], ["GAVA CRAFT", 1], ["KHMILNIY DIM", 1]]}, "may": {"ent": [["BRSM", 5], ["OKKO MARKET", 3]], "smb": [["MEALTIME", 14], ["HALYA BALUVANA", 1], ["DRAFT BEER VINNYTSIA", 1], ["THE BEERSHOP#1", 1], ["INTIMATE COMPANY", 1], ["TOV UTD ASTOR", 1]]}, "jun": {"ent": [], "smb": [["ROCKBEER", 1]]}}, "existingAdd": {"jan": [], "feb": [["BEER MARKET", 38, "ent"], ["HOP HEY", 12, "ent"], ["LOKO", 3, "ent"], ["TOCHKA", 1, "smb"], ["CHEESE&WINE", 1, "ent"], ["WINETIME", 1, "ent"], ["PIVOBANK", 1, "smb"], ["PYVNA BORODA", 1, "ent"], ["LEPRUKON", 1, "smb"], ["KVITY VAV", 1, "smb"], ["BEERWIEL", 1, "smb"], ["ODA FLOWERS", 1, "smb"], ["KRAN KHARKIV", 1, "smb"]], "mar": [["LOKO", 110, "ent"], ["BEER MARKET", 7, "ent"], ["PYVNA BORODA", 3, "ent"], ["TOCHKA", 1, "smb"], ["CHEESE&WINE", 1, "ent"], ["SPRAGA", 1, "smb"], ["NO TABOO", 1, "ent"], ["MAXBEER", 1, "ent"], ["DIMPYVA", 1, "smb"], ["HALYTSKYI KUKHOL", 1, "smb"], ["CHILL TIME", 1, "smb"]], "apr": [["BEER MARKET", 5, "ent"], ["TOCHKA", 2, "smb"], ["PIVOBANK", 1, "smb"], ["PYVNA BORODA", 1, "ent"], ["CAFE RYNOK", 1, "ent"], ["BRATER BEER WE GO", 1, "smb"]], "may": [["NO TABOO", 30, "ent"], ["NAPIVFABRYKATY SALATEIRA", 4, "smb"], ["VAPERY | VAPE SHOP", 4, "ent"], ["BEER MARKET", 1, "ent"], ["VARUS", 1, "ent"], ["13GRAM", 1, "smb"], ["CAFE RYNOK", 1, "ent"], ["ODA FLOWERS", 1, "smb"]], "jun": [["BRSM", 1, "ent"]]}, "topEnt": [{"brand": "BEER MARKET", "vertical": "ent", "peak": 195, "may": 192, "jun": 173, "first": "Jan"}, {"brand": "HOP HEY", "vertical": "ent", "peak": 161, "may": 160, "jun": 159, "first": "Jan"}, {"brand": "LOKO", "vertical": "ent", "peak": 118, "may": 117, "jun": 118, "first": "Jan"}, {"brand": "KOPIYKA", "vertical": "ent", "peak": 61, "may": 60, "jun": 59, "first": "Jan"}, {"brand": "VARUS", "vertical": "ent", "peak": 59, "may": 59, "jun": 58, "first": "Apr"}, {"brand": "PYVNA BORODA", "vertical": "ent", "peak": 48, "may": 47, "jun": 47, "first": "Jan"}, {"brand": "NO TABOO", "vertical": "ent", "peak": 39, "may": 39, "jun": 38, "first": "Feb"}, {"brand": "BEERLAND", "vertical": "ent", "peak": 32, "may": 32, "jun": 31, "first": "Jan"}, {"brand": "REMESLO BREWERY", "vertical": "ent", "peak": 32, "may": 32, "jun": 32, "first": "Jan"}, {"brand": "RODYNNA KOVBASKA", "vertical": "ent", "peak": 30, "may": 26, "jun": 18, "first": "Mar"}], "topSmb": [{"brand": "ALTBIER", "vertical": "smb", "peak": 20, "may": 18, "jun": 18, "first": "Jan"}, {"brand": "TOCHKA", "vertical": "smb", "peak": 18, "may": 18, "jun": 18, "first": "Jan"}, {"brand": "CHILL TIME", "vertical": "smb", "peak": 18, "may": 15, "jun": 15, "first": "Jan"}, {"brand": "DIMPYVA", "vertical": "smb", "peak": 17, "may": 17, "jun": 17, "first": "Jan"}, {"brand": "MEALTIME", "vertical": "smb", "peak": 14, "may": 14, "jun": 14, "first": "May"}, {"brand": "PIVOBANK", "vertical": "smb", "peak": 14, "may": 14, "jun": 14, "first": "Jan"}, {"brand": "NAPIVFABRYKATY SALATEIRA", "vertical": "smb", "peak": 11, "may": 11, "jun": 10, "first": "Apr"}, {"brand": "BEARS BEER", "vertical": "smb", "peak": 11, "may": 10, "jun": 8, "first": "Mar"}, {"brand": "LEPRUKON", "vertical": "smb", "peak": 11, "may": 11, "jun": 11, "first": "Jan"}, {"brand": "SPRAGA", "vertical": "smb", "peak": 9, "may": 9, "jun": 9, "first": "Jan"}], "partner": [{"brand": "BEER MARKET", "vertical": "ent", "jan": 150, "feb": 186, "mar": 190, "apr": 195, "may": 192, "jun": 173}, {"brand": "HOP HEY", "vertical": "ent", "jan": 149, "feb": 161, "mar": 160, "apr": 160, "may": 160, "jun": 159}, {"brand": "LOKO", "vertical": "ent", "jan": 5, "feb": 8, "mar": 118, "apr": 118, "may": 117, "jun": 118}, {"brand": "KOPIYKA", "vertical": "ent", "jan": 61, "feb": 60, "mar": 60, "apr": 60, "may": 60, "jun": 59}, {"brand": "VARUS", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 58, "may": 59, "jun": 58}, {"brand": "PYVNA BORODA", "vertical": "ent", "jan": 43, "feb": 44, "mar": 47, "apr": 48, "may": 47, "jun": 47}, {"brand": "NO TABOO", "vertical": "ent", "jan": 0, "feb": 8, "mar": 9, "apr": 8, "may": 39, "jun": 38}, {"brand": "BEERLAND", "vertical": "ent", "jan": 32, "feb": 32, "mar": 32, "apr": 32, "may": 32, "jun": 31}, {"brand": "REMESLO BREWERY", "vertical": "ent", "jan": 32, "feb": 32, "mar": 32, "apr": 32, "may": 32, "jun": 32}, {"brand": "RODYNNA KOVBASKA", "vertical": "ent", "jan": 0, "feb": 0, "mar": 30, "apr": 22, "may": 26, "jun": 18}, {"brand": "PYVNE REMESLO", "vertical": "ent", "jan": 25, "feb": 25, "mar": 25, "apr": 25, "may": 25, "jun": 25}, {"brand": "WINETIME", "vertical": "ent", "jan": 27, "feb": 27, "mar": 26, "apr": 25, "may": 24, "jun": 23}, {"brand": "TOCHKA", "vertical": "smb", "jan": 15, "feb": 15, "mar": 16, "apr": 18, "may": 18, "jun": 18}, {"brand": "ALTBIER", "vertical": "smb", "jan": 20, "feb": 18, "mar": 18, "apr": 18, "may": 18, "jun": 18}, {"brand": "KOPIYKA MINI", "vertical": "ent", "jan": 22, "feb": 21, "mar": 21, "apr": 19, "may": 18, "jun": 18}, {"brand": "DIMPYVA", "vertical": "smb", "jan": 16, "feb": 16, "mar": 17, "apr": 17, "may": 17, "jun": 17}, {"brand": "VAPERY | VAPE SHOP", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 13, "may": 17, "jun": 11}, {"brand": "CHILL TIME", "vertical": "smb", "jan": 18, "feb": 18, "mar": 16, "apr": 16, "may": 15, "jun": 15}, {"brand": "CHEESE&WINE", "vertical": "ent", "jan": 20, "feb": 18, "mar": 18, "apr": 15, "may": 14, "jun": 13}, {"brand": "MEALTIME", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 14, "jun": 14}, {"brand": "PIVOBANK", "vertical": "smb", "jan": 13, "feb": 13, "mar": 13, "apr": 14, "may": 14, "jun": 14}, {"brand": "MAXBEER", "vertical": "ent", "jan": 12, "feb": 12, "mar": 13, "apr": 13, "may": 13, "jun": 13}, {"brand": "PYANA VYSHNYA", "vertical": "ent", "jan": 13, "feb": 13, "mar": 13, "apr": 13, "may": 13, "jun": 13}, {"brand": "RUKAVYCHKA", "vertical": "ent", "jan": 19, "feb": 17, "mar": 15, "apr": 12, "may": 12, "jun": 10}, {"brand": "CAFE RYNOK", "vertical": "ent", "jan": 10, "feb": 10, "mar": 10, "apr": 11, "may": 12, "jun": 12}, {"brand": "NAPIVFABRYKATY SALATEIRA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 7, "may": 11, "jun": 10}, {"brand": "LEPRUKON", "vertical": "smb", "jan": 10, "feb": 11, "mar": 11, "apr": 11, "may": 11, "jun": 11}, {"brand": "BEARS BEER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 11, "apr": 11, "may": 10, "jun": 8}, {"brand": "TAISTRA", "vertical": "ent", "jan": 9, "feb": 9, "mar": 9, "apr": 9, "may": 9, "jun": 9}, {"brand": "SPRAGA", "vertical": "smb", "jan": 8, "feb": 8, "mar": 9, "apr": 9, "may": 9, "jun": 9}, {"brand": "VAPE SHOP KYIV", "vertical": "smb", "jan": 0, "feb": 0, "mar": 8, "apr": 8, "may": 8, "jun": 0}, {"brand": "SUSHI VESLA", "vertical": "smb", "jan": 0, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "PRAVDA CRAFT MISSION", "vertical": "ent", "jan": 7, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "PYVNA HAVAN", "vertical": "ent", "jan": 7, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "PYVNA SOVA", "vertical": "smb", "jan": 7, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "LVIVSKI KRANY", "vertical": "ent", "jan": 6, "feb": 6, "mar": 6, "apr": 6, "may": 6, "jun": 6}, {"brand": "UMANPYVO BRANDSTORE", "vertical": "ent", "jan": 0, "feb": 0, "mar": 6, "apr": 6, "may": 6, "jun": 6}, {"brand": "GOOD BEER", "vertical": "ent", "jan": 8, "feb": 6, "mar": 6, "apr": 6, "may": 6, "jun": 5}, {"brand": "MAHAZYN PYVNYY UKRAIINSKYJ KRAFT", "vertical": "smb", "jan": 6, "feb": 6, "mar": 6, "apr": 6, "may": 6, "jun": 6}, {"brand": "BRSM", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 5, "jun": 6}, {"brand": "13GRAM", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 4, "may": 5, "jun": 5}, {"brand": "ODA FLOWERS", "vertical": "smb", "jan": 3, "feb": 4, "mar": 3, "apr": 3, "may": 5, "jun": 4}, {"brand": "UMANPIVO", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "BROVARNIA PYVNA LEHENDA", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "TOP BEER", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "OPILLYA", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "BOHEMIAN KINGS BEER", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "FLOWER SHOP", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "NL FLOWER SHOP", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "BEER SOTA", "vertical": "smb", "jan": 7, "feb": 5, "mar": 6, "apr": 4, "may": 4, "jun": 4}, {"brand": "SOLO VINO", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "PYVOTEKA ODESA", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "HALYTSKYI KUKHOL", "vertical": "smb", "jan": 2, "feb": 2, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "KVITY VAV", "vertical": "smb", "jan": 2, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "CRAFT BEER MARKET", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "KRAN KHARKIV", "vertical": "smb", "jan": 2, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "SANTIM", "vertical": "ent", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "OKKO MARKET", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 3, "jun": 3}, {"brand": "CRAFT BEER DNIPRO", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 2}, {"brand": "BEERROOM", "vertical": "ent", "jan": 4, "feb": 4, "mar": 4, "apr": 3, "may": 3, "jun": 3}, {"brand": "PYVANDR", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "GOOD BEER VIN", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "VAPE STORY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BEER COMPANY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "SVIJIY ROZLUV", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "MILANO FLOWERS", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BEERWIEL", "vertical": "smb", "jan": 1, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BEERSTORE", "vertical": "smb", "jan": 1, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "PIV.KO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "PYVKO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 1}, {"brand": "BROVARNYA 8", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "KAFETERIY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BRATER BEER WE GO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 3, "may": 2, "jun": 2}, {"brand": "MAHAZYN BEER HAPPY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "PYVO MAN", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "PINA.BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "HALYA BALUVANA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "OBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BRATER BAR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "YOSHKIN KIT", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 2, "may": 1, "jun": 1}, {"brand": "BEER SHOP VINNITSYA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "HAVAN ALCO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVNA 2 LITRA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FERMA BRATA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "WINE GALLERY", "vertical": "smb", "jan": 2, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MAHAZYNKAFE KEGA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVKO NA PISHCHANOMU", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "RWW.ART", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 1, "jun": 1}, {"brand": "NALYVKY ZI LVOVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "JUST BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER MEN", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LOCATSIA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERCRAFT", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "IKURA MARKET", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "GIGI BAR-BOUTIQUEGIGI BAR-BOUTIQUE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "FRESH FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "RV-FLOWER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KHMILNIY BOB", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "DRAFT BEER VINNYTSIA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "GOLD BEER PUB", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "OKKO CAFE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVOMARKET", "vertical": "smb", "jan": 1, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LILIUM STUDIO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SHOPYVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "JERKINS AND BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FRANICOFFE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "JAGER BREWERY", "vertical": "smb", "jan": 2, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO I VISKI LBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VAPE BROTHERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERCO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KULTURA PYVA", "vertical": "smb", "jan": 2, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PIVKO KHM", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SHARLOTKA_", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO TUTA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "REPTO BOUTIQUE", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "YOY_CHE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KATRIN'S FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "COOL BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MISTO PIVMARKET", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO BILYA TEBE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "DAKS MARKET", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FRESH HEAVEN SHOP", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "APIVAS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SOLOD BEER MARKET", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VINNYTSKE PUVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BRONZE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PO PYVKU", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SONIACHNA FERMA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BRO-BEER", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LIVE BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERBERSHOP", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "CBD LOVER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "ROCK BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MAHAZYN ROZLYVNOHO PYVA BAVARIA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER TIME", "vertical": "smb", "jan": 1, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER EMPORIUM", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER TIME KYIV", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VAPORS", "vertical": "ent", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVNA LIHA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "YEPYVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LOVE FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SHOPOPIVU?", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVOTEKA 2020", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER AND MORE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MAHAZYN-KAFE BAVARIA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO L BEER BAR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SELINA FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LITR BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FAIRY TALE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LAVENDER BY LK", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "GAVA CRAFT", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "DROVA ODESA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "O'NDE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PODVAPYVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "AMELI FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DUDKA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER BAR FRIENDS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VINNIBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERSTORE365", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KLAN PYVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KEGOVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SEIM", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KAVALER TUTI", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DNEPR.YACHT", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO BAZA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "ONE SAY", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BERLIN", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LAVANDA FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "TINA`S RESTO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "UKRAINE FLOWERS", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "HMILNYJ", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER FRESH", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVNA ZAPRAVKA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PORTAL PUB", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "THE BEERSHOP#1", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "GANESHABEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "1.0.0 RADS BAR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LIME FLOWERS&DECOR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SWEET HOUSE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MAHAZYN ROZLYVNOHO PYVA PYVOTEKA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LUCKY BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "INTIMATE COMPANY", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "NASTAV CHAS PYVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "BEERCOOL", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "DON BUTON FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 1, "jun": 0}, {"brand": "PYVNA SICH", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "GRAND BEER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "TERITORYIAPIVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "KHMILNIY DIM", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 0}, {"brand": "SURU TA KOVBASU", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "3.14VO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "UMI SEA FOOD", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "SPAR", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "JUST FLOWERS", "vertical": "smb", "jan": 2, "feb": 2, "mar": 1, "apr": 2, "may": 1, "jun": 0}, {"brand": "BRATER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "PIVAS", "vertical": "smb", "jan": 3, "feb": 2, "mar": 0, "apr": 0, "may": 1, "jun": 0}, {"brand": "ZOO STRIDER IN DIVERSITY", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "MULTI COOK KYIV", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "DROFA", "vertical": "smb", "jan": 3, "feb": 3, "mar": 2, "apr": 3, "may": 1, "jun": 0}, {"brand": "TOV UTD ASTOR", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 0}, {"brand": "BIERWELLE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 0, "jun": 1}, {"brand": "ROCKBEER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 1}, {"brand": "PO KUKHLIU", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "PRO PYVO", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "BEER BROTHERS", "vertical": "smb", "jan": 2, "feb": 1, "mar": 0, "apr": 1, "may": 0, "jun": 0}, {"brand": "PYVNYI KYXOL", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "LE BOUQUET", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 0, "jun": 0}, {"brand": "MYAS MYAS", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "LIPYMO TA VARYMO", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "SUNIY KIT", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "FLEUR DELICATE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "TANDEM PYVOMARKET", "vertical": "ent", "jan": 9, "feb": 9, "mar": 2, "apr": 0, "may": 0, "jun": 0}, {"brand": "FLOWERS", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "VINOOPOKOLINO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "DARUI KVITY", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 0, "may": 0, "jun": 0}, {"brand": "NAF FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "CAFFEINE GASTRO PUB", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "KOLIBRI", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "SMOKE KING", "vertical": "smb", "jan": 8, "feb": 8, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "TARANPIVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEER AND CO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "MAHAZYN HOSPODARSTVO KARVYCKYCH", "vertical": "ent", "jan": 2, "feb": 2, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEER KING", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEERLAB", "vertical": "smb", "jan": 0, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "FALCONBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "KVITKA", "vertical": "smb", "jan": 0, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "MOOD SHOP", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "CUCUMBER", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "KAVA PYVO", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "PYVNYJ ETYKET", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "YODA", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "MOULIN ROSE", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEER STATION 13", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}]};
+const DATA = {"monthly": {"jan": {"ent": 522, "mm": 201, "smb": 294, "total": 1017}, "feb": {"ent": 579, "mm": 198, "smb": 300, "total": 1077}, "mar": {"ent": 725, "mm": 208, "smb": 298, "total": 1231}, "apr": {"ent": 788, "mm": 214, "smb": 307, "total": 1309}, "may": {"ent": 899, "mm": 229, "smb": 321, "total": 1449}, "jun": {"ent": 854, "mm": 217, "smb": 302, "total": 1373}}, "newStores": {"jan": {"ent": 519, "mm": 201, "smb": 296, "total": 1016}, "feb": {"ent": 63, "mm": 3, "smb": 25, "total": 91}, "mar": {"ent": 152, "mm": 14, "smb": 29, "total": 195}, "apr": {"ent": 77, "mm": 10, "smb": 18, "total": 105}, "may": {"ent": 113, "mm": 17, "smb": 28, "total": 158}, "jun": {"ent": 2, "mm": 0, "smb": 4, "total": 6}}, "newBrands": {"jan": {"ent": 11, "mm": 22, "smb": 149, "total": 182}, "feb": {"ent": 1, "mm": 0, "smb": 13, "total": 14}, "mar": {"ent": 2, "mm": 1, "smb": 14, "total": 17}, "apr": {"ent": 2, "mm": 1, "smb": 12, "total": 15}, "may": {"ent": 2, "mm": 1, "smb": 12, "total": 15}, "jun": {"ent": 0, "mm": 0, "smb": 3, "total": 3}}, "topNew": {"jan": {"ent": [["BEER MARKET", 150], ["HOP HEY", 149], ["KOPIYKA", 61], ["PYVNA BORODA", 43], ["REMESLO BREWERY", 32], ["PYVNE REMESLO", 25], ["KOPIYKA MINI", 22], ["RUKAVYCHKA", 19], ["PYANA VYSHNYA", 13], ["LOKO", 5], ["SANTIM", 3]], "mm": [["BEERLAND", 32], ["CHEESE&WINE", 20], ["CHILL TIME", 18], ["DIMPYVA", 16], ["TOCHKA", 15], ["MAXBEER", 12], ["CAFE RYNOK", 10], ["LEPRUKON", 10], ["TAISTRA", 9], ["GOOD BEER", 8], ["SPRAGA", 8], ["PYVNA SOVA", 7]], "smb": [["WINETIME", 27], ["ALTBIER", 21], ["PIVOBANK", 13], ["TANDEM PYVOMARKET", 9], ["SMOKE KING", 8], ["PYVNA HAVAN", 7], ["BEER SOTA", 7], ["MAHAZYN PYVNYY UKRAIINSKYJ KRAFT", 6], ["UMANPIVO", 4], ["BOHEMIAN KINGS BEER", 4], ["TOP BEER", 4], ["BROVARNIA PYVNA LEHENDA", 4]]}, "feb": {"ent": [["NO TABOO", 9]], "mm": [], "smb": [["SUSHI VESLA", 7], ["REPTO BOUTIQUE", 1], ["UKRAINE FLOWERS", 1], ["BRO-BEER", 1], ["BEERCRAFT", 1], ["DRAFT & CRAFT BEER SHOP", 1], ["SURU TA KOVBASU", 1], ["SPAR", 1], ["MYAS MYAS", 1], ["PRO PYVO", 1], ["CAFFEINE GASTRO PUB", 1], ["KVITKA", 1]]}, "mar": {"ent": [["RODYNNA KOVBASKA", 30], ["VAPORS", 1]], "mm": [["VAPE SHOP KYIV", 8]], "smb": [["BEARS BEER", 11], ["UMANPYVO BRANDSTORE", 6], ["LAVENDER BY LK", 1], ["RV-FLOWER", 1], ["DUDKA", 1], ["PIVKO KHM", 1], ["BEER TIME KYIV", 1], ["FRANICOFFE", 1], ["GRAND BEER", 1], ["PYVNA SICH", 1], ["MULTI COOK KYIV", 1], ["BRATER", 1]]}, "apr": {"ent": [["VARUS", 58], ["VAPERY | VAPE SHOP", 13]], "mm": [["NAPIVFABRYKATY SALATEIRA", 7]], "smb": [["13GRAM", 4], ["YOSHKIN KIT", 2], ["PYVKO NA PISHCHANOMU", 1], ["BIERWELLE", 1], ["KHMILNIY BOB", 1], ["GAVA CRAFT", 1], ["FRESH HEAVEN SHOP", 1], ["GIGI BAR-BOUTIQUEGIGI BAR-BOUTIQUE", 1], ["PYVO BILYA TEBE", 1], ["MISTO PIVMARKET", 1], ["KHMILNIY DIM", 1], ["LE BOUQUET", 1]]}, "may": {"ent": [["ANRI-PHARM", 70], ["BRSM", 5]], "mm": [["OKKO MARKET", 3]], "smb": [["MEALTIME", 14], ["HALYA BALUVANA", 1], ["SMAK PYVA", 1], ["GLOTOK", 1], ["DRAFT BEER VINNYTSIA", 1], ["LOCATSIA 2 ALCOHOL", 1], ["THE BEERSHOP#1", 1], ["PIVNOY BUTIK", 1], ["INTIMATE COMPANY", 1], ["KHMELNYI LEV", 1], ["BREWMEN", 1], ["TOV UTD ASTOR", 1]]}, "jun": {"ent": [], "mm": [], "smb": [["ROCKBEER", 1], ["RAJ SMAKIV", 1], ["MEAL TIME", 1]]}}, "existingAdd": {"jan": [], "feb": [["BEER MARKET", 38, "ent"], ["HOP HEY", 12, "ent"], ["LOKO", 3, "ent"], ["KRAN KHARKIV", 1, "smb"], ["ODA FLOWERS", 1, "smb"], ["PYVNA BORODA", 1, "ent"], ["CHEESE&WINE", 1, "mm"], ["WINETIME", 1, "smb"], ["LEPRUKON", 1, "mm"], ["TOCHKA", 1, "mm"], ["PIVOBANK", 1, "smb"], ["KVITY VAV", 1, "smb"], ["BEERWIEL", 1, "smb"]], "mar": [["LOKO", 110, "ent"], ["BEER MARKET", 7, "ent"], ["PYVNA BORODA", 3, "ent"], ["HALYTSKYI KUKHOL", 1, "smb"], ["NO TABOO", 1, "ent"], ["CHEESE&WINE", 1, "mm"], ["MAXBEER", 1, "mm"], ["DIMPYVA", 1, "mm"], ["TOCHKA", 1, "mm"], ["CHILL TIME", 1, "mm"], ["SPRAGA", 1, "mm"]], "apr": [["BEER MARKET", 5, "ent"], ["TOCHKA", 2, "mm"], ["PYVNA BORODA", 1, "ent"], ["CAFE RYNOK", 1, "mm"], ["PIVOBANK", 1, "smb"], ["BRATER BEER WE GO", 1, "smb"]], "may": [["NO TABOO", 30, "ent"], ["BEERLAND", 7, "mm"], ["VAPERY | VAPE SHOP", 4, "ent"], ["NAPIVFABRYKATY SALATEIRA", 4, "mm"], ["BEER MARKET", 3, "ent"], ["13GRAM", 2, "smb"], ["ODA FLOWERS", 1, "smb"], ["VARUS", 1, "ent"], ["CAFE RYNOK", 1, "mm"], ["TOCHKA", 1, "mm"], ["SPRAGA", 1, "mm"]], "jun": [["REMESLO BREWERY", 1, "ent"], ["BRSM", 1, "ent"], ["BEER SHOP VINNITSYA", 1, "smb"]]}, "topEnt": [{"brand": "BEER MARKET", "vertical": "ent", "peak": 195, "may": 194, "jun": 175, "first": "Jan"}, {"brand": "HOP HEY", "vertical": "ent", "peak": 161, "may": 160, "jun": 159, "first": "Jan"}, {"brand": "LOKO", "vertical": "ent", "peak": 118, "may": 117, "jun": 118, "first": "Jan"}, {"brand": "ANRI-PHARM", "vertical": "ent", "peak": 70, "may": 70, "jun": 61, "first": "May"}, {"brand": "KOPIYKA", "vertical": "ent", "peak": 61, "may": 60, "jun": 59, "first": "Jan"}, {"brand": "VARUS", "vertical": "ent", "peak": 59, "may": 59, "jun": 58, "first": "Apr"}, {"brand": "PYVNA BORODA", "vertical": "ent", "peak": 48, "may": 47, "jun": 47, "first": "Jan"}, {"brand": "NO TABOO", "vertical": "ent", "peak": 40, "may": 40, "jun": 39, "first": "Feb"}, {"brand": "REMESLO BREWERY", "vertical": "ent", "peak": 33, "may": 32, "jun": 33, "first": "Jan"}, {"brand": "RODYNNA KOVBASKA", "vertical": "ent", "peak": 30, "may": 26, "jun": 18, "first": "Mar"}], "topMm": [{"brand": "BEERLAND", "vertical": "mm", "peak": 39, "may": 39, "jun": 38, "first": "Jan"}, {"brand": "CHEESE&WINE", "vertical": "mm", "peak": 20, "may": 14, "jun": 13, "first": "Jan"}, {"brand": "TOCHKA", "vertical": "mm", "peak": 19, "may": 19, "jun": 19, "first": "Jan"}, {"brand": "CHILL TIME", "vertical": "mm", "peak": 18, "may": 15, "jun": 15, "first": "Jan"}, {"brand": "DIMPYVA", "vertical": "mm", "peak": 17, "may": 17, "jun": 17, "first": "Jan"}, {"brand": "MAXBEER", "vertical": "mm", "peak": 13, "may": 13, "jun": 13, "first": "Jan"}, {"brand": "CAFE RYNOK", "vertical": "mm", "peak": 12, "may": 12, "jun": 12, "first": "Jan"}, {"brand": "LEPRUKON", "vertical": "mm", "peak": 11, "may": 11, "jun": 11, "first": "Jan"}, {"brand": "NAPIVFABRYKATY SALATEIRA", "vertical": "mm", "peak": 11, "may": 11, "jun": 10, "first": "Apr"}, {"brand": "SPRAGA", "vertical": "mm", "peak": 10, "may": 10, "jun": 10, "first": "Jan"}], "topSmb": [{"brand": "WINETIME", "vertical": "smb", "peak": 27, "may": 24, "jun": 23, "first": "Jan"}, {"brand": "ALTBIER", "vertical": "smb", "peak": 21, "may": 19, "jun": 19, "first": "Jan"}, {"brand": "MEALTIME", "vertical": "smb", "peak": 14, "may": 14, "jun": 14, "first": "May"}, {"brand": "PIVOBANK", "vertical": "smb", "peak": 14, "may": 14, "jun": 14, "first": "Jan"}, {"brand": "BEARS BEER", "vertical": "smb", "peak": 11, "may": 10, "jun": 8, "first": "Mar"}, {"brand": "TANDEM PYVOMARKET", "vertical": "smb", "peak": 9, "may": 0, "jun": 0, "first": "Jan"}, {"brand": "SMOKE KING", "vertical": "smb", "peak": 8, "may": 0, "jun": 0, "first": "Jan"}, {"brand": "PYVNA HAVAN", "vertical": "smb", "peak": 7, "may": 7, "jun": 7, "first": "Jan"}, {"brand": "SUSHI VESLA", "vertical": "smb", "peak": 7, "may": 7, "jun": 7, "first": "Feb"}, {"brand": "BEER SOTA", "vertical": "smb", "peak": 7, "may": 4, "jun": 4, "first": "Jan"}], "partner": [{"brand": "BEER MARKET", "vertical": "ent", "jan": 150, "feb": 186, "mar": 190, "apr": 195, "may": 194, "jun": 175}, {"brand": "HOP HEY", "vertical": "ent", "jan": 149, "feb": 161, "mar": 160, "apr": 160, "may": 160, "jun": 159}, {"brand": "LOKO", "vertical": "ent", "jan": 5, "feb": 8, "mar": 118, "apr": 118, "may": 117, "jun": 118}, {"brand": "ANRI-PHARM", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 70, "jun": 61}, {"brand": "KOPIYKA", "vertical": "ent", "jan": 61, "feb": 60, "mar": 60, "apr": 60, "may": 60, "jun": 59}, {"brand": "VARUS", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 58, "may": 59, "jun": 58}, {"brand": "PYVNA BORODA", "vertical": "ent", "jan": 43, "feb": 44, "mar": 47, "apr": 48, "may": 47, "jun": 47}, {"brand": "NO TABOO", "vertical": "ent", "jan": 0, "feb": 9, "mar": 10, "apr": 9, "may": 40, "jun": 39}, {"brand": "BEERLAND", "vertical": "mm", "jan": 32, "feb": 32, "mar": 32, "apr": 32, "may": 39, "jun": 38}, {"brand": "REMESLO BREWERY", "vertical": "ent", "jan": 32, "feb": 32, "mar": 32, "apr": 32, "may": 32, "jun": 33}, {"brand": "RODYNNA KOVBASKA", "vertical": "ent", "jan": 0, "feb": 0, "mar": 30, "apr": 22, "may": 26, "jun": 18}, {"brand": "PYVNE REMESLO", "vertical": "ent", "jan": 25, "feb": 25, "mar": 25, "apr": 25, "may": 25, "jun": 25}, {"brand": "WINETIME", "vertical": "smb", "jan": 27, "feb": 27, "mar": 26, "apr": 25, "may": 24, "jun": 23}, {"brand": "ALTBIER", "vertical": "smb", "jan": 21, "feb": 19, "mar": 19, "apr": 19, "may": 19, "jun": 19}, {"brand": "TOCHKA", "vertical": "mm", "jan": 15, "feb": 15, "mar": 16, "apr": 18, "may": 19, "jun": 19}, {"brand": "KOPIYKA MINI", "vertical": "ent", "jan": 22, "feb": 21, "mar": 21, "apr": 19, "may": 18, "jun": 18}, {"brand": "DIMPYVA", "vertical": "mm", "jan": 16, "feb": 16, "mar": 17, "apr": 17, "may": 17, "jun": 17}, {"brand": "VAPERY | VAPE SHOP", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 13, "may": 17, "jun": 11}, {"brand": "CHILL TIME", "vertical": "mm", "jan": 18, "feb": 18, "mar": 16, "apr": 16, "may": 15, "jun": 15}, {"brand": "CHEESE&WINE", "vertical": "mm", "jan": 20, "feb": 18, "mar": 18, "apr": 15, "may": 14, "jun": 13}, {"brand": "MEALTIME", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 14, "jun": 14}, {"brand": "PIVOBANK", "vertical": "smb", "jan": 13, "feb": 13, "mar": 13, "apr": 14, "may": 14, "jun": 14}, {"brand": "PYANA VYSHNYA", "vertical": "ent", "jan": 13, "feb": 13, "mar": 13, "apr": 13, "may": 13, "jun": 13}, {"brand": "MAXBEER", "vertical": "mm", "jan": 12, "feb": 12, "mar": 13, "apr": 13, "may": 13, "jun": 13}, {"brand": "RUKAVYCHKA", "vertical": "ent", "jan": 19, "feb": 17, "mar": 15, "apr": 12, "may": 12, "jun": 10}, {"brand": "CAFE RYNOK", "vertical": "mm", "jan": 10, "feb": 10, "mar": 10, "apr": 11, "may": 12, "jun": 12}, {"brand": "LEPRUKON", "vertical": "mm", "jan": 10, "feb": 11, "mar": 11, "apr": 11, "may": 11, "jun": 11}, {"brand": "NAPIVFABRYKATY SALATEIRA", "vertical": "mm", "jan": 0, "feb": 0, "mar": 0, "apr": 7, "may": 11, "jun": 10}, {"brand": "BEARS BEER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 11, "apr": 11, "may": 10, "jun": 8}, {"brand": "SPRAGA", "vertical": "mm", "jan": 8, "feb": 8, "mar": 9, "apr": 9, "may": 10, "jun": 10}, {"brand": "TAISTRA", "vertical": "mm", "jan": 9, "feb": 9, "mar": 9, "apr": 9, "may": 9, "jun": 9}, {"brand": "VAPE SHOP KYIV", "vertical": "mm", "jan": 0, "feb": 0, "mar": 8, "apr": 8, "may": 8, "jun": 0}, {"brand": "PYVNA SOVA", "vertical": "mm", "jan": 7, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "PYVNA HAVAN", "vertical": "smb", "jan": 7, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "SUSHI VESLA", "vertical": "smb", "jan": 0, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "PRAVDA CRAFT MISSION", "vertical": "mm", "jan": 7, "feb": 7, "mar": 7, "apr": 7, "may": 7, "jun": 7}, {"brand": "MAHAZYN PYVNYY UKRAIINSKYJ KRAFT", "vertical": "smb", "jan": 6, "feb": 6, "mar": 6, "apr": 6, "may": 6, "jun": 6}, {"brand": "LVIVSKI KRANY", "vertical": "mm", "jan": 6, "feb": 6, "mar": 6, "apr": 6, "may": 6, "jun": 6}, {"brand": "GOOD BEER", "vertical": "mm", "jan": 8, "feb": 6, "mar": 6, "apr": 6, "may": 6, "jun": 5}, {"brand": "UMANPYVO BRANDSTORE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 6, "apr": 6, "may": 6, "jun": 6}, {"brand": "13GRAM", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 4, "may": 6, "jun": 6}, {"brand": "ODA FLOWERS", "vertical": "smb", "jan": 3, "feb": 4, "mar": 3, "apr": 3, "may": 5, "jun": 4}, {"brand": "BRSM", "vertical": "ent", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 5, "jun": 6}, {"brand": "NL FLOWER SHOP", "vertical": "mm", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "UMANPIVO", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "BOHEMIAN KINGS BEER", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "SOLO VINO", "vertical": "mm", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "TOP BEER", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "BROVARNIA PYVNA LEHENDA", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "BEER SOTA", "vertical": "smb", "jan": 7, "feb": 5, "mar": 6, "apr": 4, "may": 4, "jun": 4}, {"brand": "FLOWER SHOP", "vertical": "mm", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "OPILLYA", "vertical": "smb", "jan": 4, "feb": 4, "mar": 4, "apr": 4, "may": 4, "jun": 4}, {"brand": "HALYTSKYI KUKHOL", "vertical": "smb", "jan": 2, "feb": 2, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "BEERROOM", "vertical": "mm", "jan": 4, "feb": 4, "mar": 4, "apr": 3, "may": 3, "jun": 3}, {"brand": "KRAN KHARKIV", "vertical": "smb", "jan": 2, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "GOOD BEER VIN", "vertical": "mm", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "KVITY VAV", "vertical": "smb", "jan": 2, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "PYVANDR", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "OKKO MARKET", "vertical": "mm", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 3, "jun": 3}, {"brand": "CRAFT BEER MARKET", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "SANTIM", "vertical": "ent", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "PYVOTEKA ODESA", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 3}, {"brand": "CRAFT BEER DNIPRO", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 3, "may": 3, "jun": 2}, {"brand": "PYVO MAN", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "SVIJIY ROZLUV", "vertical": "mm", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "VAPE STORY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BEERWIEL", "vertical": "smb", "jan": 1, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "PYVKO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 1}, {"brand": "BEER COMPANY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "PIV.KO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "MILANO FLOWERS", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "MAHAZYN BEER HAPPY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BRATER BEER WE GO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 3, "may": 2, "jun": 2}, {"brand": "PYVOMARKET", "vertical": "smb", "jan": 2, "feb": 1, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "YOY_CHE", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "KAFETERIY", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BROVARNYA 8", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "BEERSTORE", "vertical": "smb", "jan": 1, "feb": 2, "mar": 2, "apr": 2, "may": 2, "jun": 2}, {"brand": "HALYA BALUVANA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "MAHAZYN ROZLYVNOHO PYVA PYVOTEKA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER BAR FRIENDS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER AND MORE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "NALYVKY ZI LVOVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KULTURA PYVA", "vertical": "smb", "jan": 2, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "APIVAS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "1.0.0 RADS BAR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KATRIN'S FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERBERSHOP", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "O'NDE", "vertical": "mm", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SONIACHNA FERMA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVKO NA PISHCHANOMU", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "JERKINS AND BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "GANESHABEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SOLOD BEER MARKET", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO L BEER BAR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VINNYTSKE PUVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVOTEKA 2020", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "YOSHKIN KIT", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 2, "may": 1, "jun": 1}, {"brand": "KHMIL + GRILL", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MAHAZYN-KAFE BAVARIA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VAPORS", "vertical": "ent", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PO PYVKU", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LIVE BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SMAK PYVA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "KAVALER TUTI", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LAVENDER BY LK", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER SHOP VINNITSYA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 2}, {"brand": "REPTO BOUTIQUE", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KHMILNIY BOB", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "SHOPOPIVU?", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "COFFEE STORY", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "OBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VAPE BROTHERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SWEET HOUSE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "GLOTOK", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "OKKO CAFE", "vertical": "mm", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "RV-FLOWER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PODVAPYVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER EMPORIUM", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BUKOVYNSKA KHATA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PORTAL PUB", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SEIM", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO I VISKI LBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "IKURA MARKET", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FERMA BRATA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DRAFT BEER VINNYTSIA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "GAVA CRAFT", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "RWW.ART", "vertical": "smb", "jan": 2, "feb": 2, "mar": 2, "apr": 2, "may": 1, "jun": 1}, {"brand": "HAVAN ALCO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LOCATSIA 2 ALCOHOL", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "YEPYVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERSTORE365", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MAHAZYN ROZLYVNOHO PYVA BAVARIA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PINA.BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FAIRY TALE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LOVE FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "SHOPYVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "CBD LOVER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KEGOVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "THE BEERSHOP#1", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "LAVANDA FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LUCKY BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DUDKA", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PIVNOY BUTIK", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "HMILNYJ", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO BAZA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "UKRAINE FLOWERS", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "AMELI FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER FRESH", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "GOLD BEER PUB", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FRESH HEAVEN SHOP", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "SELINA FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BRO-BEER", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "VINNIBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "ONE SAY", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MAHAZYNKAFE KEGA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "WINE GALLERY", "vertical": "smb", "jan": 2, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER MEN", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERCRAFT", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DAKS MARKET", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DRAFT & CRAFT BEER SHOP", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DROVA ODESA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVNA 2 LITRA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVNA LIHA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KLAN PYVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LOCATSIA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "DNEPR.YACHT", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "INTIMATE COMPANY", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "SHARLOTKA_", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PIVKO KHM", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "KHMELNYI LEV", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "BEER TIME KYIV", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LILIUM STUDIO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "GIGI BAR-BOUTIQUEGIGI BAR-BOUTIQUE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "FRESH FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BRATER BAR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "LITR BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BRONZE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BERLIN", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "COOL BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEER TIME", "vertical": "smb", "jan": 1, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVNA ZAPRAVKA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BEERCO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO BILYA TEBE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "ROCK BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "MISTO PIVMARKET", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 1}, {"brand": "LIME FLOWERS&DECOR", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "FRANICOFFE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "JUST BEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "JAGER BREWERY", "vertical": "smb", "jan": 2, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "PYVO TUTA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "BREWMEN", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 1}, {"brand": "TINA`S RESTO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 1}, {"brand": "JUST FLOWERS", "vertical": "smb", "jan": 2, "feb": 2, "mar": 1, "apr": 2, "may": 1, "jun": 0}, {"brand": "PIVAS", "vertical": "smb", "jan": 3, "feb": 2, "mar": 0, "apr": 0, "may": 1, "jun": 0}, {"brand": "SURU TA KOVBASU", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "SPAR", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "TERITORYIAPIVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "UMI SEA FOOD", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "DROFA", "vertical": "smb", "jan": 3, "feb": 3, "mar": 2, "apr": 3, "may": 1, "jun": 0}, {"brand": "DON BUTON FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 1, "jun": 0}, {"brand": "TOV UTD ASTOR", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 1, "jun": 0}, {"brand": "GRAND BEER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "NASTAV CHAS PYVA", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "ZOO STRIDER IN DIVERSITY", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "PYVNA SICH", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "MULTI COOK KYIV", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "BEERCOOL", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "KHMILNIY DIM", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 1, "jun": 0}, {"brand": "3.14VO", "vertical": "smb", "jan": 2, "feb": 2, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "BRATER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 1, "jun": 0}, {"brand": "ROCKBEER", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 1}, {"brand": "RAJ SMAKIV", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 1}, {"brand": "BIERWELLE", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 0, "jun": 1}, {"brand": "MEAL TIME", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 1}, {"brand": "BEER BROTHERS", "vertical": "smb", "jan": 2, "feb": 1, "mar": 0, "apr": 1, "may": 0, "jun": 0}, {"brand": "SUNIY KIT", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "MYAS MYAS", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "LIPYMO TA VARYMO", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "LE BOUQUET", "vertical": "smb", "jan": 0, "feb": 0, "mar": 0, "apr": 1, "may": 0, "jun": 0}, {"brand": "PO KUKHLIU", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "PRO PYVO", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "PYVNYI KYXOL", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 1, "may": 0, "jun": 0}, {"brand": "TANDEM PYVOMARKET", "vertical": "smb", "jan": 9, "feb": 9, "mar": 2, "apr": 0, "may": 0, "jun": 0}, {"brand": "FLOWERS", "vertical": "smb", "jan": 0, "feb": 0, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "VINOOPOKOLINO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "DARUI KVITY", "vertical": "smb", "jan": 3, "feb": 3, "mar": 3, "apr": 0, "may": 0, "jun": 0}, {"brand": "FLEUR DELICATE", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "CAFFEINE GASTRO PUB", "vertical": "smb", "jan": 0, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "NAF FLOWERS", "vertical": "smb", "jan": 1, "feb": 1, "mar": 1, "apr": 0, "may": 0, "jun": 0}, {"brand": "FALCONBEER", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "MAHAZYN HOSPODARSTVO KARVYCKYCH", "vertical": "smb", "jan": 3, "feb": 3, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "SMOKE KING", "vertical": "smb", "jan": 8, "feb": 8, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "KVITKA", "vertical": "smb", "jan": 0, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "KOLIBRI", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEER AND CO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEER KING", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEERLAB", "vertical": "smb", "jan": 0, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "TARANPIVO", "vertical": "smb", "jan": 1, "feb": 1, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "YODA", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "MOULIN ROSE", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "CUCUMBER", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "KAVA PYVO", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "MOOD SHOP", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "PYVNYJ ETYKET", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}, {"brand": "BEER STATION 13", "vertical": "smb", "jan": 1, "feb": 0, "mar": 0, "apr": 0, "may": 0, "jun": 0}]};
 const MONTHS = [{"key": "jan", "label": "January 2026", "short": "Jan", "baseline": true}, {"key": "feb", "label": "February 2026", "short": "Feb"}, {"key": "mar", "label": "March 2026", "short": "Mar"}, {"key": "apr", "label": "April 2026", "short": "Apr"}, {"key": "may", "label": "May 2026", "short": "May"}, {"key": "jun", "label": "June 2026", "short": "Jun", "mtd": true}];
 const MK = MONTHS.map(m=>m.key);
+const SEGS = ['ent','mm','smb'];
+const SEG_LABEL = {ent:'ENT',mm:'MM',smb:'SMB'};
+const SEG_FULL = {ent:'Enterprise',mm:'Mid-Market',smb:'SMB'};
 const LATEST_FULL = 'may';
-const entColor='#2563c0', smbColor='#d97706', accentColor='#1a6b43';
+const COL = {ent:'#2563c0',mm:'#7c3aed',smb:'#d97706'};
+const accentColor='#1a6b43';
 
-/* ── Month tabs + panels ── */
 function brandListHTML(brands, segment) {
   if(!brands.length) return '<div class="empty-state">No new brands this month</div>';
   const max = brands[0][1];
@@ -743,46 +327,28 @@ function brandListHTML(brands, segment) {
 }
 
 function buildMonths() {
-  const tabs = document.getElementById('monthTabs');
-  const panels = document.getElementById('monthPanels');
-  tabs.innerHTML = MONTHS.map((m,i)=>`<button class="tab-btn ${i===0?'active':''}" onclick="switchTab('${m.key}',this)">${m.label}${m.mtd?' <span style=\"font-size:10px;opacity:0.6\">(MTD)</span>':''}</button>`).join('');
-  panels.innerHTML = MONTHS.map((m,i)=>{
-    const mn = DATA.monthly[m.key], ns = DATA.newStores[m.key], nb = DATA.newBrands[m.key];
-    const prev = i>0 ? MONTHS[i-1].key : null;
-    const diff = prev ? mn.total - DATA.monthly[prev].total : 0;
-    const diffTxt = m.baseline ? 'baseline' : (diff>=0?`+${diff} vs ${MONTHS[i-1].short}`:`${diff} vs ${MONTHS[i-1].short}`);
-    let note = '';
-    if(m.baseline) note = `<div class="note">January is the <strong>baseline month</strong> — the earliest data in this dataset. Its ${ns.total.toLocaleString()} stores represent the starting portfolio, not organic growth.</div>`;
-    if(m.mtd) note = `<div class="note">June 2026 data is <strong>month-to-date (as of Jun 9)</strong>. Counts will grow through the month; the dip vs May is expected this early.</div>`;
-    const ea = DATA.existingAdd[m.key]||[];
-    const eaRows = ea.map(([b,c,s])=>`<tr><td>${b}</td><td><strong>${c}</strong></td><td><span class="badge ${s}">${s.toUpperCase()}</span></td></tr>`).join('');
-    const eaBlock = ea.length ? `
-      <div class="all-brands-wrap">
-        <div class="all-brands-header"><h4>Existing Brands Adding New Stores in ${m.short}</h4></div>
-        <table class="brands-table">
-          <thead><tr><th>Brand</th><th>New Stores Added</th><th>Segment</th></tr></thead>
-          <tbody>${eaRows}</tbody>
-        </table>
-      </div>` : '';
+  document.getElementById('monthTabs').innerHTML = MONTHS.map((m,i)=>`<button class="tab-btn ${i===0?'active':''}" onclick="switchTab('${m.key}',this)">${m.label}${m.mtd?' <span style=\"font-size:10px;opacity:0.6\">(MTD)</span>':''}</button>`).join('');
+  document.getElementById('monthPanels').innerHTML = MONTHS.map((m,i)=>{
+    const mn=DATA.monthly[m.key], ns=DATA.newStores[m.key], nb=DATA.newBrands[m.key];
+    const diff = i>0 ? mn.total-DATA.monthly[MONTHS[i-1].key].total : 0;
+    const diffTxt = m.baseline?'baseline':(diff>=0?`+${diff} vs ${MONTHS[i-1].short}`:`${diff} vs ${MONTHS[i-1].short}`);
+    let note='';
+    if(m.baseline) note=`<div class="note">January is the <strong>baseline month</strong> — the earliest data in this dataset. Its ${ns.total.toLocaleString()} stores represent the starting portfolio, not organic growth.</div>`;
+    if(m.mtd) note=`<div class="note">June 2026 data is <strong>month-to-date (as of Jun 9)</strong>. Counts will grow through the month; the dip vs May is expected this early.</div>`;
+    const ea=DATA.existingAdd[m.key]||[];
+    const eaRows=ea.map(([b,c,s])=>`<tr><td>${b}</td><td><strong>${c}</strong></td><td><span class="badge ${s}">${SEG_LABEL[s]}</span></td></tr>`).join('');
+    const eaBlock=ea.length?`<div class="all-brands-wrap"><div class="all-brands-header"><h4>Existing Brands Adding New Stores in ${m.short}</h4></div><table class="brands-table"><thead><tr><th>Brand</th><th>New Stores Added</th><th>Segment</th></tr></thead><tbody>${eaRows}</tbody></table></div>`:'';
+    const segStats = SEGS.map(s=>`<div class="mini-stat ${s}"><div class="mini-label">${SEG_LABEL[s]} New</div><div class="mini-value">${ns[s]}</div><div class="mini-desc">new stores</div></div>`).join('');
+    const newBrandSections = SEGS.map(s=>`<div class="brand-section"><div class="brand-section-header"><h4>Top ${SEG_LABEL[s]} New Brands</h4><span class="segment-pill ${s}">${SEG_FULL[s]}</span></div><div class="brand-list">${brandListHTML(DATA.topNew[m.key][s],s)}</div></div>`).join('');
     return `<div id="panel-${m.key}" class="month-panel ${i===0?'active':''}">
       ${note}
       <div class="month-summary-grid" ${note?'style="margin-top:16px"':''}>
         <div class="mini-stat green"><div class="mini-label">Total Active${m.mtd?' (MTD)':''}</div><div class="mini-value">${mn.total.toLocaleString()}</div><div class="mini-desc">${diffTxt}</div></div>
         <div class="mini-stat green"><div class="mini-label">New${m.mtd?' (MTD)':''}</div><div class="mini-value">${ns.total.toLocaleString()}</div><div class="mini-desc">first-time active</div></div>
-        <div class="mini-stat ent"><div class="mini-label">ENT New</div><div class="mini-value">${ns.ent}</div><div class="mini-desc">store_3p_ent</div></div>
-        <div class="mini-stat smb"><div class="mini-label">SMB New</div><div class="mini-value">${ns.smb}</div><div class="mini-desc">store_3p_mm_smb</div></div>
+        ${segStats}
         <div class="mini-stat"><div class="mini-label">New Brands</div><div class="mini-value">${nb.total}</div><div class="mini-desc">unique brands</div></div>
       </div>
-      <div class="brands-grid">
-        <div class="brand-section">
-          <div class="brand-section-header"><h4>Top ENT New Brands</h4><span class="segment-pill ent">Enterprise</span></div>
-          <div class="brand-list">${brandListHTML(DATA.topNew[m.key].ent,'ent')}</div>
-        </div>
-        <div class="brand-section">
-          <div class="brand-section-header"><h4>Top SMB New Brands</h4><span class="segment-pill smb">SMB</span></div>
-          <div class="brand-list">${brandListHTML(DATA.topNew[m.key].smb,'smb')}</div>
-        </div>
-      </div>
+      <div class="brands-grid-3">${newBrandSections}</div>
       ${eaBlock}
     </div>`;
   }).join('');
@@ -791,78 +357,52 @@ function buildMonths() {
 function switchTab(key, btn) {
   document.querySelectorAll('.month-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('panel-'+key).classList.add('active');
-  btn.classList.add('active');
+  document.getElementById('panel-'+key).classList.add('active'); btn.classList.add('active');
 }
 
-/* ── Top brand tables ── */
 function fillTop(id, list) {
   document.getElementById(id).innerHTML = list.map((x,i)=>`<tr>
     <td>${i+1}</td><td><strong>${x.brand}</strong></td><td>${x.peak}</td>
     <td>${x.may}</td><td>${x.jun}</td>
     <td>${x.first} 2026 ${x.first!=='Jan'?'<span class="badge new-brand">NEW</span>':''}</td>
-    <td><span class="badge ${x.vertical}">${x.vertical.toUpperCase()}</span></td></tr>`).join('');
+    <td><span class="badge ${x.vertical}">${SEG_LABEL[x.vertical]}</span></td></tr>`).join('');
 }
 
-/* ── Charts ── */
 function buildCharts() {
   const labels = MONTHS.map(m=>m.short+' 2026');
-  new Chart(document.getElementById('chartNewStores'),{type:'bar',data:{labels,datasets:[
-    {label:'ENT (store_3p_ent)',data:MK.map(k=>DATA.newStores[k].ent),backgroundColor:entColor},
-    {label:'SMB (store_3p_mm_smb)',data:MK.map(k=>DATA.newStores[k].smb),backgroundColor:smbColor}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:12}}},
-    scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,grid:{color:'#f0f0ef'},ticks:{font:{size:11}}}}}});
-
-  new Chart(document.getElementById('chartTotal'),{type:'line',data:{labels,datasets:[{
-    label:'Active Stores',data:MK.map(k=>DATA.monthly[k].total),borderColor:accentColor,
-    backgroundColor:'rgba(26,107,67,0.08)',fill:true,tension:0.3,pointRadius:5,pointBackgroundColor:accentColor}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-    scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{min:900,grid:{color:'#f0f0ef'},ticks:{font:{size:11}}}}}});
-
-  new Chart(document.getElementById('chartShare'),{type:'bar',data:{labels,datasets:[
-    {label:'ENT %',data:MK.map(k=>Math.round(DATA.monthly[k].ent/DATA.monthly[k].total*100)),backgroundColor:entColor},
-    {label:'SMB %',data:MK.map(k=>Math.round(DATA.monthly[k].smb/DATA.monthly[k].total*100)),backgroundColor:smbColor}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:12}}},
-    scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,max:100,grid:{color:'#f0f0ef'},ticks:{font:{size:11},callback:v=>v+'%'}}}}});
-
-  new Chart(document.getElementById('chartBrands'),{type:'bar',data:{labels,datasets:[
-    {label:'New ENT Brands',data:MK.map(k=>DATA.newBrands[k].ent),backgroundColor:entColor},
-    {label:'New SMB Brands',data:MK.map(k=>DATA.newBrands[k].smb),backgroundColor:smbColor}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:12}}},
-    scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,grid:{color:'#f0f0ef'},ticks:{font:{size:11}}}}}});
+  const segDS = src => SEGS.map(s=>({label:SEG_LABEL[s],data:MK.map(k=>DATA[src][k][s]),backgroundColor:COL[s]}));
+  const stackOpt = {responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:12}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,grid:{color:'#f0f0ef'},ticks:{font:{size:11}}}}};
+  new Chart(document.getElementById('chartNewStores'),{type:'bar',data:{labels,datasets:segDS('newStores')},options:stackOpt});
+  new Chart(document.getElementById('chartTotal'),{type:'line',data:{labels,datasets:[{label:'Active Stores',data:MK.map(k=>DATA.monthly[k].total),borderColor:accentColor,backgroundColor:'rgba(26,107,67,0.08)',fill:true,tension:0.3,pointRadius:5,pointBackgroundColor:accentColor}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{min:900,grid:{color:'#f0f0ef'},ticks:{font:{size:11}}}}}});
+  const shareDS = SEGS.map(s=>({label:SEG_LABEL[s]+' %',data:MK.map(k=>Math.round(DATA.monthly[k][s]/DATA.monthly[k].total*100)),backgroundColor:COL[s]}));
+  new Chart(document.getElementById('chartShare'),{type:'bar',data:{labels,datasets:shareDS},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:12}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:11}}},y:{stacked:true,max:100,grid:{color:'#f0f0ef'},ticks:{font:{size:11},callback:v=>v+'%'}}}}});
+  new Chart(document.getElementById('chartBrands'),{type:'bar',data:{labels,datasets:segDS('newBrands')},options:stackOpt});
 }
 
-/* ── View switch ── */
 function switchView(name, btn) {
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.main-nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('view-'+name).classList.add('active');
-  btn.classList.add('active');
+  document.getElementById('view-'+name).classList.add('active'); btn.classList.add('active');
 }
 
-/* ════ PARTNER DYNAMICS ════ */
 const partnerData = DATA.partner;
 function vals(d) { return MK.map(k=>d[k]); }
 function getStatus(d) {
-  const v = vals(d);
-  const firstNZ = v.findIndex(x=>x>0);
+  const v=vals(d), firstNZ=v.findIndex(x=>x>0);
   if(firstNZ===-1) return 'churned';
   const lastTwoZero = v[v.length-1]===0 && v[v.length-2]===0;
-  if(firstNZ>0) { if(lastTwoZero) return 'churned'; return 'new'; }
+  if(firstNZ>0) return lastTwoZero?'churned':'new';
   if(lastTwoZero) return 'churned';
-  const first = v[0];
-  let latest = 0; for(let i=v.length-1;i>=0;i--){if(v[i]>0){latest=v[i];break;}}
-  if(latest > first*1.1) return 'growing';
-  if(latest < first*0.85) return 'declining';
+  const first=v[0]; let latest=0; for(let i=v.length-1;i>=0;i--){if(v[i]>0){latest=v[i];break;}}
+  if(latest>first*1.1) return 'growing';
+  if(latest<first*0.85) return 'declining';
   return 'stable';
 }
 function sparkline(d) {
-  const v = vals(d), max = Math.max(...v,1), W=84,H=28,pad=4,n=v.length;
-  const xs = v.map((_,i)=>pad+i*(W-pad*2)/(n-1));
-  const ys = v.map(x=>H-pad-(x/max)*(H-pad*2));
-  const dots = xs.map((x,i)=>`<circle cx="${x}" cy="${ys[i]}" r="2" fill="${v[i]>0?'#1a6b43':'#e5e5e4'}"/>`).join('');
-  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-    <polyline points="${xs.map((x,i)=>x+','+ys[i]).join(' ')}" fill="none" stroke="#1a6b43" stroke-width="1.5" opacity="0.6"/>${dots}</svg>`;
+  const v=vals(d), max=Math.max(...v,1), W=84,H=28,pad=4,n=v.length;
+  const xs=v.map((_,i)=>pad+i*(W-pad*2)/(n-1)), ys=v.map(x=>H-pad-(x/max)*(H-pad*2));
+  const dots=xs.map((x,i)=>`<circle cx="${x}" cy="${ys[i]}" r="2" fill="${v[i]>0?'#1a6b43':'#e5e5e4'}"/>`).join('');
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline points="${xs.map((x,i)=>x+','+ys[i]).join(' ')}" fill="none" stroke="#1a6b43" stroke-width="1.5" opacity="0.6"/>${dots}</svg>`;
 }
 function delta(curr, prev) {
   if(prev===0&&curr===0) return '';
@@ -874,8 +414,8 @@ function delta(curr, prev) {
 let segFilter='all', statusFilter='all', sortCol='may', sortAsc=false;
 function setSegFilter(seg, btn) {
   segFilter=seg;
-  document.querySelectorAll('#segAll,#segEnt,#segSmb').forEach(b=>b.className='filter-btn');
-  btn.classList.add(seg==='all'?'active-all':(seg==='ent'?'active-ent':'active-smb'));
+  document.querySelectorAll('#segAll,#segEnt,#segMm,#segSmb').forEach(b=>b.className='filter-btn');
+  btn.classList.add(seg==='all'?'active-all':'active-'+seg);
   renderPartnerTable();
 }
 function setStatusFilter(st, btn) {
@@ -885,21 +425,19 @@ function setStatusFilter(st, btn) {
 }
 function cycleSortCol(col) {
   if(sortCol===col) sortAsc=!sortAsc; else { sortCol=col; sortAsc=col==='brand'; }
-  document.getElementById('partnerSort').value=col;
-  updateHead(); renderPartnerTable();
+  document.getElementById('partnerSort').value=col; updateHead(); renderPartnerTable();
 }
 function buildHead() {
-  const head = document.getElementById('partnerHead');
-  let html = `<th onclick="cycleSortCol('brand')" id="th-brand">Brand <span class="sort-arrow">↕</span></th><th>Seg</th>`;
-  MONTHS.forEach(m=>{ html += `<th onclick="cycleSortCol('${m.key}')" id="th-${m.key}" class="num-cell">${m.short}${m.mtd?' MTD':''} <span class="sort-arrow">↕</span></th>`; });
-  html += `<th style="min-width:90px">Trend</th><th>Status</th>`;
-  head.innerHTML = html; updateHead();
+  let html=`<th onclick="cycleSortCol('brand')" id="th-brand">Brand <span class="sort-arrow">↕</span></th><th>Seg</th>`;
+  MONTHS.forEach(m=>{ html+=`<th onclick="cycleSortCol('${m.key}')" id="th-${m.key}" class="num-cell">${m.short}${m.mtd?' MTD':''} <span class="sort-arrow">↕</span></th>`; });
+  html+=`<th style="min-width:90px">Trend</th><th>Status</th>`;
+  document.getElementById('partnerHead').innerHTML=html; updateHead();
 }
 function updateHead() {
   ['brand',...MK,'total'].forEach(c=>{
     const th=document.getElementById('th-'+c); if(!th) return;
     th.classList.toggle('sorted', c===sortCol);
-    const a=th.querySelector('.sort-arrow'); if(a) a.textContent = c===sortCol?(sortAsc?'↑':'↓'):'↕';
+    const a=th.querySelector('.sort-arrow'); if(a) a.textContent=c===sortCol?(sortAsc?'↑':'↓'):'↕';
   });
 }
 function renderPartnerTable() {
@@ -913,46 +451,39 @@ function renderPartnerTable() {
     if(statusFilter!=='all'&&getStatus(d)!==statusFilter) return false;
     return true;
   });
-  const tot = d=>MK.reduce((s,k)=>s+d[k],0);
+  const tot=d=>MK.reduce((s,k)=>s+d[k],0);
   rows.sort((a,b)=>{
     let va=sortCol==='brand'?a.brand:(sortCol==='total'?tot(a):a[sortCol]);
     let vb=sortCol==='brand'?b.brand:(sortCol==='total'?tot(b):b[sortCol]);
     if(va<vb) return sortAsc?-1:1; if(va>vb) return sortAsc?1:-1; return 0;
   });
-  const tbody=document.getElementById('partnerTbody');
-  tbody.innerHTML=rows.map(d=>{
+  document.getElementById('partnerTbody').innerHTML=rows.map(d=>{
     const st=getStatus(d);
-    const seg=`<span class="badge ${d.vertical}">${d.vertical.toUpperCase()}</span>`;
+    const seg=`<span class="badge ${d.vertical}">${SEG_LABEL[d.vertical]}</span>`;
     let cells='';
     MK.forEach((k,i)=>{
-      const prev = i>0 ? d[MK[i-1]] : 0;
-      if(i===0) cells += `<td class="num-cell ${d[k]===0?'zero':''}">${d[k]||'—'}</td>`;
-      else cells += (d[k]===0&&prev===0)?`<td class="num-cell zero">—</td>`:`<td class="num-cell">${d[k]}${delta(d[k],prev)}</td>`;
+      const prev=i>0?d[MK[i-1]]:0;
+      if(i===0) cells+=`<td class="num-cell ${d[k]===0?'zero':''}">${d[k]||'—'}</td>`;
+      else cells+=(d[k]===0&&prev===0)?`<td class="num-cell zero">—</td>`:`<td class="num-cell">${d[k]}${delta(d[k],prev)}</td>`;
     });
     return `<tr><td class="partner-name" title="${d.brand}">${d.brand}</td><td>${seg}</td>${cells}<td>${sparkline(d)}</td><td><span class="status-badge ${st}">${st}</span></td></tr>`;
   }).join('');
   document.getElementById('partnerCount').textContent=`${rows.length} partner${rows.length!==1?'s':''}`;
   document.getElementById('partnerFooter').textContent=`Showing ${rows.length} of ${partnerData.length} brands · June data is month-to-date (as of Jun 9, 2026)`;
-
-  const totals = MK.map(k=>rows.reduce((s,d)=>s+d[k],0));
-  const newAdds = MK.map((k,i)=> i===0?0:rows.filter(d=>d[MK[i-1]]===0&&d[k]>0).reduce((s,d)=>s+d[k],0));
-  function badge(diff,base){ if(base) return `<span class="mtc-added neu">baseline</span>`;
-    if(diff===0) return `<span class="mtc-added neu">±0</span>`;
-    return diff>0?`<span class="mtc-added pos">+${diff}</span>`:`<span class="mtc-added neg">${diff}</span>`; }
-  document.getElementById('monthlyTotals').innerHTML = MONTHS.map((m,i)=>{
-    const diff = i>0 ? totals[i]-totals[i-1] : 0;
-    const sub = m.baseline ? 'total stores' : (newAdds[i]>0?`${newAdds[i]} new stores added`:'');
-    return `<div class="month-total-card ${m.key===LATEST_FULL?'highlight':''}">
-      <span class="mtc-label">${m.short} 2026 ${m.mtd?'<span style=\"font-weight:400;opacity:0.7\">MTD</span>':''}</span>
-      <div class="mtc-row"><span class="mtc-total">${totals[i].toLocaleString()}</span>${badge(diff,m.baseline)}</div>
-      <span class="mtc-sub">${sub}</span></div>`;
+  const totals=MK.map(k=>rows.reduce((s,d)=>s+d[k],0));
+  const newAdds=MK.map((k,i)=> i===0?0:rows.filter(d=>d[MK[i-1]]===0&&d[k]>0).reduce((s,d)=>s+d[k],0));
+  function badge(diff,base){ if(base) return `<span class="mtc-added neu">baseline</span>`; if(diff===0) return `<span class="mtc-added neu">±0</span>`; return diff>0?`<span class="mtc-added pos">+${diff}</span>`:`<span class="mtc-added neg">${diff}</span>`; }
+  document.getElementById('monthlyTotals').innerHTML=MONTHS.map((m,i)=>{
+    const diff=i>0?totals[i]-totals[i-1]:0;
+    const sub=m.baseline?'total stores':(newAdds[i]>0?`${newAdds[i]} new stores added`:'');
+    return `<div class="month-total-card ${m.key===LATEST_FULL?'highlight':''}"><span class="mtc-label">${m.short} 2026 ${m.mtd?'<span style=\"font-weight:400;opacity:0.7\">MTD</span>':''}</span><div class="mtc-row"><span class="mtc-total">${totals[i].toLocaleString()}</span>${badge(diff,m.baseline)}</div><span class="mtc-sub">${sub}</span></div>`;
   }).join('');
 }
 
-/* init */
 buildMonths();
 buildCharts();
 fillTop('topEntBody', DATA.topEnt);
+fillTop('topMmBody', DATA.topMm);
 fillTop('topSmbBody', DATA.topSmb);
 buildHead();
 renderPartnerTable();
