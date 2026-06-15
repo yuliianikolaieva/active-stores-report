@@ -2,30 +2,38 @@ import csv, json
 from collections import defaultdict
 
 BASE = "/Users/yuliia.nikolaieva/Downloads/Active store"
-SRC = "/Users/yuliia.nikolaieva/Downloads/Active stores tracking 2026-06-09T1356.csv"
+SRC = "/Users/yuliia.nikolaieva/Downloads/Active stores tracking 2026-06-15T1004.csv"
 OUT = BASE + "/active-stores-dynamics.html"
 
 rows = list(csv.DictReader(open(SRC)))
-months = ['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06']
-mkey = {'2026-01':'jan','2026-02':'feb','2026-03':'mar','2026-04':'apr','2026-05':'may','2026-06':'jun'}
-mshort = {'2026-01':'Jan','2026-02':'Feb','2026-03':'Mar','2026-04':'Apr','2026-05':'May','2026-06':'Jun'}
 SEGS = ['ent','mm','smb']
+MON  = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'}
+MONF = {1:'January',2:'February',3:'March',4:'April',5:'May',6:'June',7:'July',8:'August',9:'September',10:'October',11:'November',12:'December'}
 
-# ── Segment now comes from Business Segment Code V2 ──
+# ── Segment comes from Business Segment Code V2 ──
 def seg_of(r):
     c = r['Business Segment Code V2']
     if c == 'ENT-NC': return 'ent'
     if c == 'MM': return 'mm'
     if c == 'SMB': return 'smb'
-    # "Missing Segment" -> fallback to delivery vertical
     return 'ent' if r['Delivery Vertical'] == 'store_3p_ent' else 'smb'
 
 def is_archived(p): return '[Archived]' in p
 
-brand_month_stores = defaultdict(lambda: defaultdict(set))
+# Data is WEEKLY snapshots (YYYY-MM-DD). Monthly metrics use the last snapshot of each month.
+weeks = sorted(set(r['Report Time (dynamic)'] for r in rows))
+final_week = weeks[-1]
+month_strs = sorted(set(w[:7] for w in weeks))
+month_end = {}
+for w in weeks:
+    month_end[w[:7]] = w  # weeks sorted asc -> last write is latest snapshot of that month
+mkey   = {ms: MON[int(ms[5:7])].lower() for ms in month_strs}
+mshort = {ms: MON[int(ms[5:7])] for ms in month_strs}
+
+brand_week_stores = defaultdict(lambda: defaultdict(set))
 brand_seg_votes = defaultdict(lambda: defaultdict(int))
-provider_months = defaultdict(set)
-provider_seg = {}
+provider_weeks = defaultdict(set)
+provider_rec = {}   # provider -> [week, brand, seg] of its latest active snapshot
 
 for r in rows:
     p = r['Provider Name']
@@ -33,73 +41,99 @@ for r in rows:
     brand = r['Brand Name'].strip()
     if not brand: continue
     s = seg_of(r)
-    m = r['Report Time (dynamic)']
-    brand_month_stores[brand][m].add(p)
+    w = r['Report Time (dynamic)']
+    brand_week_stores[brand][w].add(p)
     brand_seg_votes[brand][s] += 1
-    provider_months[p].add(m)
-    provider_seg[p] = s
+    provider_weeks[p].add(w)
+    if p not in provider_rec or w >= provider_rec[p][0]:
+        provider_rec[p] = [w, brand, s]
 
 brand_seg = {b: max(v, key=v.get) for b, v in brand_seg_votes.items()}
 
+def bcount(b, ms):  # store count for a brand at the month-end snapshot
+    return len(brand_week_stores[b].get(month_end[ms], ()))
+
+provider_first_week  = {p: min(ws) for p, ws in provider_weeks.items()}
+provider_first_month = {p: provider_first_week[p][:7] for p in provider_weeks}
+provider_seg = {p: provider_rec[p][2] for p in provider_weeks}
+
 monthly = {}
-for m in months:
+for ms in month_strs:
     c = {s:0 for s in SEGS}
-    for b, md in brand_month_stores.items():
-        c[brand_seg[b]] += len(md.get(m, ()))
+    for b in brand_week_stores:
+        c[brand_seg[b]] += bcount(b, ms)
     c['total'] = sum(c[s] for s in SEGS)
-    monthly[mkey[m]] = c
+    monthly[mkey[ms]] = c
 
-first_month = {p: min(ms) for p, ms in provider_months.items()}
-new_stores = {mkey[m]: {**{s:0 for s in SEGS}, 'total':0} for m in months}
-for p, fm in first_month.items():
-    new_stores[mkey[fm]][provider_seg[p]] += 1
-    new_stores[mkey[fm]]['total'] += 1
+new_stores = {mkey[ms]: {**{s:0 for s in SEGS}, 'total':0} for ms in month_strs}
+for p in provider_weeks:
+    k = mkey[provider_first_month[p]]
+    new_stores[k][provider_seg[p]] += 1
+    new_stores[k]['total'] += 1
 
-brand_first_month = {}
-for b, md in brand_month_stores.items():
-    present = [m for m in months if md.get(m)]
-    if present: brand_first_month[b] = min(present)
+brand_first_month = {b: min(brand_week_stores[b])[:7] for b in brand_week_stores}
 
-new_brands = {mkey[m]: {**{s:0 for s in SEGS}, 'total':0, 'list':[]} for m in months}
-for b, fm in brand_first_month.items():
-    s = brand_seg[b]; k = mkey[fm]
+new_brands = {mkey[ms]: {**{s:0 for s in SEGS}, 'total':0, 'list':[]} for ms in month_strs}
+for b in brand_week_stores:
+    fm = brand_first_month[b]; s = brand_seg[b]; k = mkey[fm]
     new_brands[k][s]+=1; new_brands[k]['total']+=1
-    new_brands[k]['list'].append((b, len(brand_month_stores[b][fm]), s))
+    new_brands[k]['list'].append((b, bcount(b, fm), s))
 
 top_new = {}
-for m in months:
-    lst = sorted(new_brands[mkey[m]]['list'], key=lambda x:-x[1])
-    top_new[mkey[m]] = {s: [[b,c] for (b,c,sg) in lst if sg==s][:12] for s in SEGS}
+for ms in month_strs:
+    lst = sorted(new_brands[mkey[ms]]['list'], key=lambda x:-x[1])
+    top_new[mkey[ms]] = {s: [[b,c] for (b,c,sg) in lst if sg==s][:12] for s in SEGS}
 
 existing_add = {}
-for mi, m in enumerate(months):
-    if mi == 0: existing_add[mkey[m]] = []; continue
+for i, ms in enumerate(month_strs):
+    if i == 0: existing_add[mkey[ms]] = []; continue
     adds = []
-    for b, md in brand_month_stores.items():
-        if brand_first_month.get(b) == m: continue
-        new_here = [p for p in md.get(m, ()) if first_month[p]==m]
-        if new_here: adds.append([b, len(new_here), brand_seg[b]])
-    existing_add[mkey[m]] = sorted(adds, key=lambda x:-x[1])[:15]
+    for b in brand_week_stores:
+        if brand_first_month.get(b) == ms: continue
+        cnt = sum(1 for p in brand_week_stores[b].get(month_end[ms], ()) if provider_first_month[p]==ms)
+        if cnt: adds.append([b, cnt, brand_seg[b]])
+    existing_add[mkey[ms]] = sorted(adds, key=lambda x:-x[1])[:15]
 
 partner = []
-for b in brand_month_stores:
+for b in brand_week_stores:
     rec = {'brand': b, 'vertical': brand_seg[b]}
-    for m in months: rec[mkey[m]] = len(brand_month_stores[b].get(m, ()))
+    for ms in month_strs: rec[mkey[ms]] = bcount(b, ms)
     partner.append(rec)
-partner.sort(key=lambda d:-d['may'])
+partner.sort(key=lambda d:-d.get('may', 0))
 
-def peak(b): return max(len(brand_month_stores[b].get(m,())) for m in months)
+def peak(b): return max(bcount(b, ms) for ms in month_strs)
 allb = [{'brand':b,'vertical':brand_seg[b],'peak':peak(b),
-         'may':len(brand_month_stores[b].get('2026-05',())),
-         'jun':len(brand_month_stores[b].get('2026-06',())),
-         'first':mshort[brand_first_month[b]]} for b in brand_month_stores]
+         'may':bcount(b,'2026-05') if '2026-05' in month_end else 0,
+         'jun':bcount(b,'2026-06') if '2026-06' in month_end else 0,
+         'first':mshort[brand_first_month[b]]} for b in brand_week_stores]
 top = {s: sorted([x for x in allb if x['vertical']==s], key=lambda x:-x['peak'])[:10] for s in SEGS}
+
+# ── Churn: stores that went inactive and did NOT return by the final snapshot ──
+nxt = {weeks[i]: weeks[i+1] for i in range(len(weeks)-1)}
+churn = []
+for p in provider_weeks:
+    last = max(provider_weeks[p])
+    if last == final_week:  # still active in the latest snapshot
+        continue
+    since = nxt[last]
+    churn.append({
+        'addr': p, 'brand': provider_rec[p][1], 'seg': provider_seg[p],
+        'first': provider_first_week[p], 'last': last, 'since': since, 'month': since[:7],
+    })
+churn.sort(key=lambda x: (x['since'], x['brand'], x['addr']), reverse=True)
+
+from collections import Counter
+wk_cnt = Counter(c['since'] for c in churn)
+mo_cnt = Counter(c['month'] for c in churn)
+churn_weeks  = [{'week': w, 'label': f"{mshort[w[:7]]} {int(w[8:10])}", 'count': wk_cnt.get(w, 0)} for w in weeks[1:]]
+churn_months = [{'month': ms, 'label': f"{mshort[ms]} {ms[:4]}", 'count': mo_cnt.get(ms, 0)} for ms in month_strs]
 
 DATA = {
     'monthly': monthly, 'newStores': new_stores,
     'newBrands': {k:{kk:new_brands[k][kk] for kk in (*SEGS,'total')} for k in new_brands},
     'topNew': top_new, 'existingAdd': existing_add,
     'topEnt': top['ent'], 'topMm': top['mm'], 'topSmb': top['smb'], 'partner': partner,
+    'churn': churn, 'churnWeeks': churn_weeks, 'churnMonths': churn_months, 'finalWeek': final_week,
 }
 
 MONTHS_META = [
@@ -261,7 +295,15 @@ table.partner-table tbody tr:hover td { background:#fafaf9; }
 .mtc-added.neg { background:#fee2e2; color:#dc2626; }
 .mtc-added.neu { background:var(--bg); color:var(--text-secondary); }
 .mtc-sub { font-size:11px; color:var(--text-secondary); }
+.toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.churn-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+.churn-chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; margin-bottom:16px; }
+.churn-chart-card h3 { font-size:14px; font-weight:600; margin-bottom:4px; }
+.churn-chart-card .chart-desc { font-size:12px; color:var(--text-secondary); margin-bottom:14px; }
+.churn-chart-canvas { position:relative; height:240px; }
+.addr-cell { white-space:normal; max-width:380px; font-size:12px; line-height:1.4; }
 @media (max-width:900px) {
+  .churn-summary { grid-template-columns:repeat(2,1fr); }
   .container { padding:0 20px; }
   .page-header { padding:20px; }
   .kpi-grid { grid-template-columns:repeat(2,1fr); }
@@ -297,7 +339,7 @@ body = f'''<body>
       <span class="tag">ENT · MM · SMB</span>
       <span class="tag">Business Segment</span>
       <span class="tag">6 months</span>
-      <span class="tag">As of Jun 9, 2026</span>
+      <span class="tag">Weekly · through Jun 8, 2026</span>
     </div>
   </div>
 </div>
@@ -305,6 +347,7 @@ body = f'''<body>
 <nav class="main-nav">
   <button class="main-nav-btn active" onclick="switchView('overview', this)">Monthly Overview</button>
   <button class="main-nav-btn" onclick="switchView('partners', this)">Partner Dynamics</button>
+  <button class="main-nav-btn" onclick="switchView('inactive', this)">Inactive Stores</button>
 </nav>
 
 <div id="view-overview" class="view active">
@@ -431,6 +474,45 @@ body = f'''<body>
 </div>
 </div>
 
+<div id="view-inactive" class="view">
+<div class="container">
+  <div class="section">
+    <p class="section-title">Inactive Stores — Went Inactive &amp; Did Not Return (by Jun 8)</p>
+    <div class="toolbar">
+      <input class="partner-search" type="text" id="churnSearch" placeholder="Search address or brand..." oninput="renderChurn()" />
+      <div class="filter-group">
+        <button class="filter-btn active-all" id="chWeek" onclick="setChMode('week',this)">By Week</button>
+        <button class="filter-btn" id="chMonth" onclick="setChMode('month',this)">By Month</button>
+      </div>
+      <div class="filter-group">
+        <button class="filter-btn active-all" id="chSegAll" onclick="setChSeg('all',this)">All</button>
+        <button class="filter-btn" id="chSegEnt" onclick="setChSeg('ent',this)">ENT</button>
+        <button class="filter-btn" id="chSegMm" onclick="setChSeg('mm',this)">MM</button>
+        <button class="filter-btn" id="chSegSmb" onclick="setChSeg('smb',this)">SMB</button>
+      </div>
+      <select class="sort-select" id="churnPeriod" onchange="renderChurn()"></select>
+      <span class="partner-count" id="churnCount"></span>
+    </div>
+    <div class="churn-summary" id="churnSummary"></div>
+    <div class="churn-chart-card">
+      <h3 id="churnChartTitle">Stores Going Inactive per Week</h3>
+      <p class="chart-desc">Stores that disappeared from the weekly snapshot and never returned. Click a bar to filter the table.</p>
+      <div class="churn-chart-canvas"><canvas id="churnChart"></canvas></div>
+    </div>
+    <div class="partner-table-wrap">
+      <table class="partner-table">
+        <thead><tr>
+          <th>Address</th><th>Brand</th><th>Seg</th>
+          <th>First Active</th><th>Last Active</th><th id="chPeriodHead">Inactive Since (Week)</th>
+        </tr></thead>
+        <tbody id="churnTbody"></tbody>
+      </table>
+      <div class="partner-table-footer" id="churnFooter"></div>
+    </div>
+  </div>
+</div>
+</div>
+
 <script>
 const DATA = {data_js};
 const MONTHS = {meta_js};
@@ -462,7 +544,7 @@ function buildMonths() {{
     const diffTxt = m.baseline?'baseline':(diff>=0?`+${{diff}} vs ${{MONTHS[i-1].short}}`:`${{diff}} vs ${{MONTHS[i-1].short}}`);
     let note='';
     if(m.baseline) note=`<div class="note">January is the <strong>baseline month</strong> — the earliest data in this dataset. Its ${{ns.total.toLocaleString()}} stores represent the starting portfolio, not organic growth.</div>`;
-    if(m.mtd) note=`<div class="note">June 2026 data is <strong>month-to-date (as of Jun 9)</strong>. Counts will grow through the month; the dip vs May is expected this early.</div>`;
+    if(m.mtd) note=`<div class="note">June 2026 data is <strong>month-to-date (latest weekly snapshot Jun 8)</strong>. Counts will grow through the month; the dip vs May is expected this early.</div>`;
     const ea=DATA.existingAdd[m.key]||[];
     const eaRows=ea.map(([b,c,s])=>`<tr><td>${{b}}</td><td><strong>${{c}}</strong></td><td><span class="badge ${{s}}">${{SEG_LABEL[s]}}</span></td></tr>`).join('');
     const eaBlock=ea.length?`<div class="all-brands-wrap"><div class="all-brands-header"><h4>Existing Brands Adding New Stores in ${{m.short}}</h4></div><table class="brands-table"><thead><tr><th>Brand</th><th>New Stores Added</th><th>Segment</th></tr></thead><tbody>${{eaRows}}</tbody></table></div>`:'';
@@ -597,7 +679,7 @@ function renderPartnerTable() {{
     return `<tr><td class="partner-name" title="${{d.brand}}">${{d.brand}}</td><td>${{seg}}</td>${{cells}}<td>${{sparkline(d)}}</td><td><span class="status-badge ${{st}}">${{st}}</span></td></tr>`;
   }}).join('');
   document.getElementById('partnerCount').textContent=`${{rows.length}} partner${{rows.length!==1?'s':''}}`;
-  document.getElementById('partnerFooter').textContent=`Showing ${{rows.length}} of ${{partnerData.length}} brands · June data is month-to-date (as of Jun 9, 2026)`;
+  document.getElementById('partnerFooter').textContent=`Showing ${{rows.length}} of ${{partnerData.length}} brands · monthly = last weekly snapshot of each month · June MTD (Jun 8)`;
   const totals=MK.map(k=>rows.reduce((s,d)=>s+d[k],0));
   const newAdds=MK.map((k,i)=> i===0?0:rows.filter(d=>d[MK[i-1]]===0&&d[k]>0).reduce((s,d)=>s+d[k],0));
   function badge(diff,base){{ if(base) return `<span class="mtc-added neu">baseline</span>`; if(diff===0) return `<span class="mtc-added neu">±0</span>`; return diff>0?`<span class="mtc-added pos">+${{diff}}</span>`:`<span class="mtc-added neg">${{diff}}</span>`; }}
@@ -608,6 +690,79 @@ function renderPartnerTable() {{
   }}).join('');
 }}
 
+/* ════ INACTIVE STORES ════ */
+const churnData = DATA.churn;
+const MONJS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const weekLabel = {{}}; DATA.churnWeeks.forEach(o=>weekLabel[o.week]=o.label);
+const monthLabel = {{}}; DATA.churnMonths.forEach(o=>monthLabel[o.month]=o.label);
+function fmtDate(d) {{ return d ? MONJS[parseInt(d.slice(5,7))-1]+' '+parseInt(d.slice(8,10)) : '—'; }}
+let chMode='week', chSeg='all', churnChart=null;
+
+function buildPeriodSelect() {{
+  const sel=document.getElementById('churnPeriod');
+  const list = chMode==='week' ? DATA.churnWeeks : DATA.churnMonths;
+  const opts = ['<option value="all">All periods</option>'];
+  list.filter(p=>p.count>0).slice().reverse().forEach(p=>{{
+    const v = chMode==='week'?p.week:p.month;
+    opts.push(`<option value="${{v}}">${{p.label}} (${{p.count}})</option>`);
+  }});
+  sel.innerHTML = opts.join('');
+}}
+
+function setChMode(mode, btn) {{
+  chMode=mode;
+  document.querySelectorAll('#chWeek,#chMonth').forEach(b=>b.classList.remove('active-all'));
+  btn.classList.add('active-all');
+  document.getElementById('churnChartTitle').textContent = mode==='week'?'Stores Going Inactive per Week':'Stores Going Inactive per Month';
+  document.getElementById('chPeriodHead').textContent = mode==='week'?'Inactive Since (Week)':'Inactive In (Month)';
+  buildPeriodSelect(); buildChurnChart(); renderChurn();
+}}
+function setChSeg(seg, btn) {{
+  chSeg=seg;
+  document.querySelectorAll('#chSegAll,#chSegEnt,#chSegMm,#chSegSmb').forEach(b=>b.className='filter-btn');
+  btn.classList.add(seg==='all'?'active-all':'active-'+seg);
+  buildChurnChart(); renderChurn();
+}}
+
+function buildChurnChart() {{
+  const list = chMode==='week' ? DATA.churnWeeks : DATA.churnMonths;
+  const labels = list.map(p=>p.label);
+  const counts = list.map(p=>churnData.filter(c=>(chMode==='week'?c.since===p.week:c.month===p.month) && (chSeg==='all'||c.seg===chSeg)).length);
+  if(churnChart) churnChart.destroy();
+  churnChart = new Chart(document.getElementById('churnChart'),{{
+    type:'bar',
+    data:{{labels,datasets:[{{label:'Stores went inactive',data:counts,backgroundColor:'#dc2626'}}]}},
+    options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}}}},
+      onClick:(e,els)=>{{ if(els.length){{ const i=els[0].index; const v=chMode==='week'?list[i].week:list[i].month; document.getElementById('churnPeriod').value=v; renderChurn(); }} }},
+      scales:{{x:{{grid:{{display:false}},ticks:{{font:{{size:10}},maxRotation:60,minRotation:0}}}},y:{{grid:{{color:'#f0f0ef'}},ticks:{{font:{{size:11}},precision:0}}}}}}}}
+  }});
+}}
+
+function renderChurn() {{
+  const search=document.getElementById('churnSearch').value.toLowerCase();
+  const period=document.getElementById('churnPeriod').value;
+  const matchPeriod = c => period==='all' || (chMode==='week'?c.since===period:c.month===period);
+  const matchSearch = c => !search || c.addr.toLowerCase().includes(search) || c.brand.toLowerCase().includes(search);
+  const base = churnData.filter(c=>matchPeriod(c) && matchSearch(c));
+  const rows = base.filter(c=>chSeg==='all'||c.seg===chSeg);
+  document.getElementById('churnTbody').innerHTML = rows.map(c=>`<tr>
+    <td class="addr-cell" title="${{c.addr}}">${{c.addr}}</td>
+    <td>${{c.brand}}</td>
+    <td><span class="badge ${{c.seg}}">${{SEG_LABEL[c.seg]}}</span></td>
+    <td class="num-cell">${{fmtDate(c.first)}}</td>
+    <td class="num-cell">${{fmtDate(c.last)}}</td>
+    <td>${{chMode==='week'?(weekLabel[c.since]||c.since):(monthLabel[c.month]||c.month)}}</td>
+  </tr>`).join('') || `<tr><td colspan="6" class="empty-state">No inactive stores match the filters</td></tr>`;
+  document.getElementById('churnCount').textContent=`${{rows.length}} store${{rows.length!==1?'s':''}}`;
+  document.getElementById('churnFooter').textContent=`Showing ${{rows.length}} of ${{churnData.length}} stores that went inactive · weekly snapshots Jan 5 – Jun 8, 2026`;
+  const cnt = s => base.filter(c=>c.seg===s).length;
+  document.getElementById('churnSummary').innerHTML = `
+    <div class="month-total-card"><span class="mtc-label">Total Inactive</span><div class="mtc-row"><span class="mtc-total">${{base.length}}</span></div><span class="mtc-sub">${{period==='all'?'all periods':'selected period'}}</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--ent)"><span class="mtc-label">ENT</span><div class="mtc-row"><span class="mtc-total">${{cnt('ent')}}</span></div><span class="mtc-sub">enterprise</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--mm)"><span class="mtc-label">MM</span><div class="mtc-row"><span class="mtc-total">${{cnt('mm')}}</span></div><span class="mtc-sub">mid-market</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--smb)"><span class="mtc-label">SMB</span><div class="mtc-row"><span class="mtc-total">${{cnt('smb')}}</span></div><span class="mtc-sub">small business</span></div>`;
+}}
+
 buildMonths();
 buildCharts();
 fillTop('topEntBody', DATA.topEnt);
@@ -615,6 +770,9 @@ fillTop('topMmBody', DATA.topMm);
 fillTop('topSmbBody', DATA.topSmb);
 buildHead();
 renderPartnerTable();
+buildPeriodSelect();
+buildChurnChart();
+renderChurn();
 </script>
 </body>
 </html>'''
