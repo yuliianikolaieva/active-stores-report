@@ -1,4 +1,6 @@
-Active stores tracking *.csv
+.env
+explore_dbx.py
 *.csv
+Active stores tracking *.csv
 __pycache__/
 *.pyc
