@@ -2,7 +2,7 @@ import csv, json
 from collections import defaultdict
 
 BASE = "/Users/yuliia.nikolaieva/Downloads/Active store"
-SRC = "/Users/yuliia.nikolaieva/Downloads/Active stores tracking 2026-06-15T1004.csv"
+SRC = "/Users/yuliia.nikolaieva/Downloads/Active store/active_stores_from_dbx.csv"
 OUT = BASE + "/active-stores-dynamics.html"
 
 rows = list(csv.DictReader(open(SRC)))
