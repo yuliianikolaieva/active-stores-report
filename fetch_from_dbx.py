@@ -15,18 +15,29 @@ from pathlib import Path
 from databricks import sql as dbsql
 
 ROOT = Path(__file__).parent
-ENV = Path("/Users/yuliia.nikolaieva/Downloads/Reports GIT HUB/VARUS/.env")
 OUT = ROOT / "active_stores_from_dbx.csv"
 START = "2026-01-05"   # first Monday snapshot
 
+# Credentials come from environment (GitHub Secrets in CI). For local runs we fall
+# back to a local .env (ROOT/.env) or the VARUS .env — neither is committed.
+LOCAL_ENVS = [ROOT / ".env",
+              Path("/Users/yuliia.nikolaieva/Downloads/Reports GIT HUB/VARUS/.env")]
+
 def load_env():
-    for line in ENV.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line: continue
-        k, _, v = line.partition("=")
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    for env_file in LOCAL_ENVS:
+        if not env_file.exists():
+            continue
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 load_env()
+for req in ("DATABRICKS_HOST", "DATABRICKS_TOKEN", "DATABRICKS_WAREHOUSE_ID"):
+    if not os.environ.get(req):
+        sys.exit(f"Missing {req} (set it as a GitHub Secret / env var or in a local .env)")
 kw = {}
 if os.environ.get("DATABRICKS_TLS_NO_VERIFY", "").lower() in ("1","true","yes"):
     kw["_tls_no_verify"] = True

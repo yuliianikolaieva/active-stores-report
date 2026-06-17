@@ -1,9 +1,10 @@
 import csv, json
 from collections import defaultdict
+from pathlib import Path
 
-BASE = "/Users/yuliia.nikolaieva/Downloads/Active store"
-SRC = "/Users/yuliia.nikolaieva/Downloads/Active store/active_stores_from_dbx.csv"
-OUT = BASE + "/active-stores-dynamics.html"
+BASE = str(Path(__file__).resolve().parent)
+SRC = BASE + "/active_stores_from_dbx.csv"
+OUT = BASE + "/index.html"
 
 rows = list(csv.DictReader(open(SRC)))
 SEGS = ['ent','mm','smb']
