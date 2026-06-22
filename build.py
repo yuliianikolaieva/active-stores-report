@@ -1,12 +1,21 @@
-import csv, json
+import csv, json, os
 from collections import defaultdict
 from pathlib import Path
 
 BASE = str(Path(__file__).resolve().parent)
 SRC = BASE + "/active_stores_from_dbx.csv"
+SRC_DATES = BASE + "/active_dates_from_dbx.csv"
 OUT = BASE + "/index.html"
 
 rows = list(csv.DictReader(open(SRC)))
+
+# Exact daily first/last active date per provider (optional; produced by fetch_from_dbx.py).
+# Used to display the concrete day a store was active instead of the weekly-snapshot Monday.
+first_active_date, last_active_date = {}, {}
+if os.path.exists(SRC_DATES):
+    for r in csv.DictReader(open(SRC_DATES)):
+        first_active_date[r['provider_name']] = r['first_active_date']
+        last_active_date[r['provider_name']] = r['last_active_date']
 SEGS = ['ent','mm','smb']
 MON  = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'}
 MONF = {1:'January',2:'February',3:'March',4:'April',5:'May',6:'June',7:'July',8:'August',9:'September',10:'October',11:'November',12:'December'}
@@ -120,6 +129,7 @@ for p in provider_weeks:
     churn.append({
         'addr': p, 'brand': provider_rec[p][1], 'seg': provider_seg[p],
         'first': provider_first_week[p], 'last': last, 'since': since, 'month': since[:7],
+        'firstDate': first_active_date.get(p, ''), 'lastDate': last_active_date.get(p, ''),
     })
 churn.sort(key=lambda x: (x['since'], x['brand'], x['addr']), reverse=True)
 
@@ -751,8 +761,8 @@ function renderChurn() {{
     <td class="addr-cell" title="${{c.addr}}">${{c.addr}}</td>
     <td>${{c.brand}}</td>
     <td><span class="badge ${{c.seg}}">${{SEG_LABEL[c.seg]}}</span></td>
-    <td class="num-cell">${{fmtDate(c.first)}}</td>
-    <td class="num-cell">${{fmtDate(c.last)}}</td>
+    <td class="num-cell">${{fmtDate(c.firstDate||c.first)}}</td>
+    <td class="num-cell">${{fmtDate(c.lastDate||c.last)}}</td>
     <td>${{chMode==='week'?(weekLabel[c.since]||c.since):(monthLabel[c.month]||c.month)}}</td>
   </tr>`).join('') || `<tr><td colspan="6" class="empty-state">No inactive stores match the filters</td></tr>`;
   document.getElementById('churnCount').textContent=`${{rows.length}} store${{rows.length!==1?'s':''}}`;

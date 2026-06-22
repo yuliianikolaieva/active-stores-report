@@ -16,6 +16,7 @@ from databricks import sql as dbsql
 
 ROOT = Path(__file__).parent
 OUT = ROOT / "active_stores_from_dbx.csv"
+OUT_DATES = ROOT / "active_dates_from_dbx.csv"
 START = "2026-01-05"   # first Monday snapshot
 
 # Credentials come from environment (GitHub Secrets in CI). For local runs we fall
@@ -64,15 +65,31 @@ HAVING SUM(a.active_time) > 0
 ORDER BY report_time, brand_name, provider_name
 """
 
+# Exact (daily) first/last active dates per store, used to show the concrete day
+# a store was active (not just the Monday of its weekly snapshot). A day counts as
+# active when active_time > 0 on that specific date.
+DATES_QUERY = f"""
+SELECT
+    p.provider_name,
+    DATE_FORMAT(MIN(a.created_date), 'yyyy-MM-dd') AS first_active_date,
+    DATE_FORMAT(MAX(a.created_date), 'yyyy-MM-dd') AS last_active_date
+FROM hive_metastore.ng_delivery_spark.etl_delivery_provider_daily_availability a
+JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON a.provider_id = p.provider_id
+WHERE p.country_code = 'ua'
+  AND p.delivery_vertical LIKE 'store%'
+  AND a.created_date >= DATE'{START}'
+  AND a.created_date <= DATE_SUB(DATE_TRUNC('week', CURRENT_DATE()), 1)
+  AND a.active_time > 0
+GROUP BY p.provider_name
+"""
+
 def main():
     conn = dbsql.connect(server_hostname=os.environ["DATABRICKS_HOST"],
                          http_path=f"/sql/1.0/warehouses/{os.environ['DATABRICKS_WAREHOUSE_ID']}",
                          access_token=os.environ["DATABRICKS_TOKEN"], **kw)
     cur = conn.cursor()
     cur.execute(QUERY)
-    cols = [d[0] for d in cur.description]
     rows = cur.fetchall()
-    conn.close()
 
     header = ["", "Report Time (dynamic)", "Country Name", "Delivery Vertical",
               "Provider Name", "Brand Name", "Business Segment Code V2",
@@ -83,6 +100,17 @@ def main():
         for i, r in enumerate(rows, 1):
             w.writerow([i, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]])
     print(f"Wrote {len(rows)} rows -> {OUT}")
+
+    cur.execute(DATES_QUERY)
+    drows = cur.fetchall()
+    with open(OUT_DATES, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["provider_name", "first_active_date", "last_active_date"])
+        for r in drows:
+            w.writerow([r[0], r[1], r[2]])
+    print(f"Wrote {len(drows)} rows -> {OUT_DATES}")
+
+    conn.close()
 
 if __name__ == "__main__":
     main()
