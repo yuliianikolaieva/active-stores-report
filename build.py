@@ -139,12 +139,38 @@ mo_cnt = Counter(c['month'] for c in churn)
 churn_weeks  = [{'week': w, 'label': f"{mshort[w[:7]]} {int(w[8:10])}", 'count': wk_cnt.get(w, 0)} for w in weeks[1:]]
 churn_months = [{'month': ms, 'label': f"{mshort[ms]} {ms[:4]}", 'count': mo_cnt.get(ms, 0)} for ms in month_strs]
 
+# ── Quarterly aggregation (segment breakdown) ──
+# Active stores = the count at the quarter-end snapshot (point-in-time, like monthly).
+# New stores / new brands = additive sum across the quarter's months.
+def quarter_key(ms):  # "2026-03" -> "2026-Q1"
+    return f"{ms[:4]}-Q{(int(ms[5:7]) - 1)//3 + 1}"
+
+quarters = sorted(set(quarter_key(ms) for ms in month_strs))
+q_months = {q: [ms for ms in month_strs if quarter_key(ms) == q] for q in quarters}
+latest_month = month_strs[-1]
+
+quarterly, q_new_stores, q_new_brands = {}, {}, {}
+for q in quarters:
+    qm = q_months[q]
+    end_k = mkey[qm[-1]]
+    quarterly[q] = {s: monthly[end_k][s] for s in SEGS}
+    quarterly[q]['total'] = monthly[end_k]['total']
+    q_new_stores[q] = {s: sum(new_stores[mkey[ms]][s] for ms in qm) for s in SEGS}
+    q_new_stores[q]['total'] = sum(new_stores[mkey[ms]]['total'] for ms in qm)
+    q_new_brands[q] = {s: sum(new_brands[mkey[ms]][s] for ms in qm) for s in SEGS}
+    q_new_brands[q]['total'] = sum(new_brands[mkey[ms]]['total'] for ms in qm)
+
+QUARTERS_META = [{'key': q, 'label': f"Q{q[-1]} {q[:4]}", 'short': f"Q{q[-1]}",
+                  'partial': latest_month in q_months[q]} for q in quarters]
+
 DATA = {
     'monthly': monthly, 'newStores': new_stores,
     'newBrands': {k:{kk:new_brands[k][kk] for kk in (*SEGS,'total')} for k in new_brands},
     'topNew': top_new, 'existingAdd': existing_add,
     'topEnt': top['ent'], 'topMm': top['mm'], 'topSmb': top['smb'], 'partner': partner,
     'churn': churn, 'churnWeeks': churn_weeks, 'churnMonths': churn_months, 'finalWeek': final_week,
+    'firstWeek': weeks[0],
+    'quarterly': quarterly, 'qNewStores': q_new_stores, 'qNewBrands': q_new_brands,
 }
 
 MONTHS_META = [
@@ -158,6 +184,8 @@ MONTHS_META = [
 
 data_js = json.dumps(DATA, ensure_ascii=False)
 meta_js = json.dumps(MONTHS_META, ensure_ascii=False)
+quarters_js = json.dumps(QUARTERS_META, ensure_ascii=False)
+fw_label = f"{mshort[final_week[:7]]} {int(final_week[8:10])}, {final_week[:4]}"
 
 peak_total = max(monthly[m['key']]['total'] for m in MONTHS_META)
 peak_label = {m['key']:m['short'] for m in MONTHS_META}[max(monthly, key=lambda k: monthly[k]['total'])]
@@ -350,7 +378,7 @@ body = f'''<body>
       <span class="tag">ENT · MM · SMB</span>
       <span class="tag">Business Segment</span>
       <span class="tag">6 months</span>
-      <span class="tag">Weekly · through Jun 8, 2026</span>
+      <span class="tag">Weekly · through {fw_label}</span>
     </div>
   </div>
 </div>
@@ -402,6 +430,31 @@ body = f'''<body>
         <p class="chart-desc">All active stores in portfolio each month</p>
         <div class="chart-canvas-wrap"><canvas id="chartTotal"></canvas></div>
       </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <p class="section-title">Quarterly Breakdown — by Segment</p>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>Active Stores by Quarter</h3>
+        <p class="chart-desc">Stores active at quarter-end, split by business segment</p>
+        <div class="chart-canvas-wrap"><canvas id="chartQuarterly"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>New Stores per Quarter</h3>
+        <p class="chart-desc">First-time active stores within the quarter, by segment</p>
+        <div class="chart-canvas-wrap"><canvas id="chartQuarterlyNew"></canvas></div>
+      </div>
+    </div>
+    <div class="all-brands-wrap" style="margin-top:16px">
+      <table class="brands-table" id="quarterlyTable">
+        <thead><tr>
+          <th>Quarter</th><th>ENT</th><th>MM</th><th>SMB</th><th>Total Active</th>
+          <th>New Stores</th><th>New Brands</th>
+        </tr></thead>
+        <tbody id="quarterlyBody"></tbody>
+      </table>
     </div>
   </div>
 
@@ -488,7 +541,7 @@ body = f'''<body>
 <div id="view-inactive" class="view">
 <div class="container">
   <div class="section">
-    <p class="section-title">Inactive Stores — Went Inactive &amp; Did Not Return (by Jun 8)</p>
+    <p class="section-title">Inactive Stores — Went Inactive &amp; Did Not Return (by {fw_label})</p>
     <div class="toolbar">
       <input class="partner-search" type="text" id="churnSearch" placeholder="Search address or brand..." oninput="renderChurn()" />
       <div class="filter-group">
@@ -527,6 +580,8 @@ body = f'''<body>
 <script>
 const DATA = {data_js};
 const MONTHS = {meta_js};
+const QUARTERS = {quarters_js};
+const QK = QUARTERS.map(q=>q.key);
 const MK = MONTHS.map(m=>m.key);
 const SEGS = ['ent','mm','smb'];
 const SEG_LABEL = {{ent:'ENT',mm:'MM',smb:'SMB'}};
@@ -555,7 +610,7 @@ function buildMonths() {{
     const diffTxt = m.baseline?'baseline':(diff>=0?`+${{diff}} vs ${{MONTHS[i-1].short}}`:`${{diff}} vs ${{MONTHS[i-1].short}}`);
     let note='';
     if(m.baseline) note=`<div class="note">January is the <strong>baseline month</strong> — the earliest data in this dataset. Its ${{ns.total.toLocaleString()}} stores represent the starting portfolio, not organic growth.</div>`;
-    if(m.mtd) note=`<div class="note">June 2026 data is <strong>month-to-date (latest weekly snapshot Jun 8)</strong>. Counts will grow through the month; the dip vs May is expected this early.</div>`;
+    if(m.mtd) note=`<div class="note">${{m.label}} data is <strong>month-to-date (latest weekly snapshot ${{fmtDate(DATA.finalWeek)}})</strong>. Counts will grow through the month; the dip vs ${{MONTHS[i-1].short}} is expected this early.</div>`;
     const ea=DATA.existingAdd[m.key]||[];
     const eaRows=ea.map(([b,c,s])=>`<tr><td>${{b}}</td><td><strong>${{c}}</strong></td><td><span class="badge ${{s}}">${{SEG_LABEL[s]}}</span></td></tr>`).join('');
     const eaBlock=ea.length?`<div class="all-brands-wrap"><div class="all-brands-header"><h4>Existing Brands Adding New Stores in ${{m.short}}</h4></div><table class="brands-table"><thead><tr><th>Brand</th><th>New Stores Added</th><th>Segment</th></tr></thead><tbody>${{eaRows}}</tbody></table></div>`:'';
@@ -598,6 +653,27 @@ function buildCharts() {{
   const shareDS = SEGS.map(s=>({{label:SEG_LABEL[s]+' %',data:MK.map(k=>Math.round(DATA.monthly[k][s]/DATA.monthly[k].total*100)),backgroundColor:COL[s]}}));
   new Chart(document.getElementById('chartShare'),{{type:'bar',data:{{labels,datasets:shareDS}},options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{position:'bottom',labels:{{font:{{size:11}},padding:12}}}}}},scales:{{x:{{stacked:true,grid:{{display:false}},ticks:{{font:{{size:11}}}}}},y:{{stacked:true,max:100,grid:{{color:'#f0f0ef'}},ticks:{{font:{{size:11}},callback:v=>v+'%'}}}}}}}}}});
   new Chart(document.getElementById('chartBrands'),{{type:'bar',data:{{labels,datasets:segDS('newBrands')}},options:stackOpt}});
+}}
+
+function buildQuarterly() {{
+  const labels = QUARTERS.map(q=>q.label+(q.partial?' (partial)':''));
+  const stackOpt = {{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{position:'bottom',labels:{{font:{{size:11}},padding:12}}}}}},scales:{{x:{{stacked:true,grid:{{display:false}},ticks:{{font:{{size:11}}}}}},y:{{stacked:true,grid:{{color:'#f0f0ef'}},ticks:{{font:{{size:11}}}}}}}}}};
+  const activeDS = SEGS.map(s=>({{label:SEG_LABEL[s],data:QK.map(k=>DATA.quarterly[k][s]),backgroundColor:COL[s]}}));
+  const newDS = SEGS.map(s=>({{label:SEG_LABEL[s],data:QK.map(k=>DATA.qNewStores[k][s]),backgroundColor:COL[s]}}));
+  new Chart(document.getElementById('chartQuarterly'),{{type:'bar',data:{{labels,datasets:activeDS}},options:stackOpt}});
+  new Chart(document.getElementById('chartQuarterlyNew'),{{type:'bar',data:{{labels,datasets:newDS}},options:stackOpt}});
+  document.getElementById('quarterlyBody').innerHTML = QUARTERS.map(q=>{{
+    const a=DATA.quarterly[q.key], ns=DATA.qNewStores[q.key], nb=DATA.qNewBrands[q.key];
+    return `<tr>
+      <td><strong>${{q.label}}</strong>${{q.partial?' <span class="badge new-brand">PARTIAL</span>':''}}</td>
+      <td><span class="badge ent">${{a.ent}}</span></td>
+      <td><span class="badge mm">${{a.mm}}</span></td>
+      <td><span class="badge smb">${{a.smb}}</span></td>
+      <td><strong>${{a.total.toLocaleString()}}</strong></td>
+      <td>${{ns.total}}</td>
+      <td>${{nb.total}}</td>
+    </tr>`;
+  }}).join('');
 }}
 
 function switchView(name, btn) {{
@@ -690,7 +766,7 @@ function renderPartnerTable() {{
     return `<tr><td class="partner-name" title="${{d.brand}}">${{d.brand}}</td><td>${{seg}}</td>${{cells}}<td>${{sparkline(d)}}</td><td><span class="status-badge ${{st}}">${{st}}</span></td></tr>`;
   }}).join('');
   document.getElementById('partnerCount').textContent=`${{rows.length}} partner${{rows.length!==1?'s':''}}`;
-  document.getElementById('partnerFooter').textContent=`Showing ${{rows.length}} of ${{partnerData.length}} brands · monthly = last weekly snapshot of each month · June MTD (Jun 8)`;
+  document.getElementById('partnerFooter').textContent=`Showing ${{rows.length}} of ${{partnerData.length}} brands · monthly = last weekly snapshot of each month · ${{MONTHS[MONTHS.length-1].label}} MTD (${{fmtDate(DATA.finalWeek)}})`;
   const totals=MK.map(k=>rows.reduce((s,d)=>s+d[k],0));
   const newAdds=MK.map((k,i)=> i===0?0:rows.filter(d=>d[MK[i-1]]===0&&d[k]>0).reduce((s,d)=>s+d[k],0));
   function badge(diff,base){{ if(base) return `<span class="mtc-added neu">baseline</span>`; if(diff===0) return `<span class="mtc-added neu">±0</span>`; return diff>0?`<span class="mtc-added pos">+${{diff}}</span>`:`<span class="mtc-added neg">${{diff}}</span>`; }}
@@ -766,7 +842,7 @@ function renderChurn() {{
     <td>${{chMode==='week'?(weekLabel[c.since]||c.since):(monthLabel[c.month]||c.month)}}</td>
   </tr>`).join('') || `<tr><td colspan="6" class="empty-state">No inactive stores match the filters</td></tr>`;
   document.getElementById('churnCount').textContent=`${{rows.length}} store${{rows.length!==1?'s':''}}`;
-  document.getElementById('churnFooter').textContent=`Showing ${{rows.length}} of ${{churnData.length}} stores that went inactive · weekly snapshots Jan 5 – Jun 8, 2026`;
+  document.getElementById('churnFooter').textContent=`Showing ${{rows.length}} of ${{churnData.length}} stores that went inactive · weekly snapshots ${{fmtDate(DATA.firstWeek)}} – ${{fmtDate(DATA.finalWeek)}}, ${{DATA.finalWeek.slice(0,4)}}`;
   const cnt = s => base.filter(c=>c.seg===s).length;
   document.getElementById('churnSummary').innerHTML = `
     <div class="month-total-card"><span class="mtc-label">Total Inactive</span><div class="mtc-row"><span class="mtc-total">${{base.length}}</span></div><span class="mtc-sub">${{period==='all'?'all periods':'selected period'}}</span></div>
@@ -777,6 +853,7 @@ function renderChurn() {{
 
 buildMonths();
 buildCharts();
+buildQuarterly();
 fillTop('topEntBody', DATA.topEnt);
 fillTop('topMmBody', DATA.topMm);
 fillTop('topSmbBody', DATA.topSmb);
