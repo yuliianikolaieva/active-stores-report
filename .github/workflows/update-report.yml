@@ -2,8 +2,8 @@ name: Update Active Stores report
 
 on:
   schedule:
-    # 08:00 UTC every Monday = 11:00 Kyiv (EEST / summer). In winter (EET) this is 10:00 Kyiv.
-    - cron: '0 8 * * 1'
+    # 07:00 UTC every Monday = 10:00 Kyiv (EEST / summer). In winter (EET) this is 09:00 Kyiv.
+    - cron: '0 7 * * 1'
   workflow_dispatch: {}
 
 permissions:
