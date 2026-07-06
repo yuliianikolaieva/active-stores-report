@@ -139,6 +139,17 @@ mo_cnt = Counter(c['month'] for c in churn)
 churn_weeks  = [{'week': w, 'label': f"{mshort[w[:7]]} {int(w[8:10])}", 'count': wk_cnt.get(w, 0)} for w in weeks[1:]]
 churn_months = [{'month': ms, 'label': f"{mshort[ms]} {ms[:4]}", 'count': mo_cnt.get(ms, 0)} for ms in month_strs]
 
+# ── Inactive since a fixed cutoff: partners/locations that went inactive in a week
+#    on/after the cutoff and never reactivated through the latest snapshot ──
+SINCE_CUTOFF = '2026-06-01'
+fw_label    = f"{MON[int(final_week[5:7])]} {int(final_week[8:10])}, {final_week[:4]}"
+since_label = f"{MON[int(SINCE_CUTOFF[5:7])]} {int(SINCE_CUTOFF[8:10])}, {SINCE_CUTOFF[:4]}"
+since_short = f"{MON[int(SINCE_CUTOFF[5:7])]} {int(SINCE_CUTOFF[8:10])}"
+churn_since = [c for c in churn if c['since'] >= SINCE_CUTOFF]
+churn_since_weeks = [{'week': w, 'label': f"{mshort[w[:7]]} {int(w[8:10])}",
+                      'count': sum(1 for c in churn_since if c['since'] == w)}
+                     for w in weeks[1:] if w >= SINCE_CUTOFF]
+
 # ── Quarterly aggregation (segment breakdown) ──
 # Active stores = the count at the quarter-end snapshot (point-in-time, like monthly).
 # New stores / new brands = additive sum across the quarter's months.
@@ -171,6 +182,8 @@ DATA = {
     'churn': churn, 'churnWeeks': churn_weeks, 'churnMonths': churn_months, 'finalWeek': final_week,
     'firstWeek': weeks[0],
     'quarterly': quarterly, 'qNewStores': q_new_stores, 'qNewBrands': q_new_brands,
+    'churnSince': churn_since, 'churnSinceWeeks': churn_since_weeks,
+    'sinceLabel': since_label, 'fwLabel': fw_label,
 }
 
 MONTHS_META = [
@@ -185,7 +198,6 @@ MONTHS_META = [
 data_js = json.dumps(DATA, ensure_ascii=False)
 meta_js = json.dumps(MONTHS_META, ensure_ascii=False)
 quarters_js = json.dumps(QUARTERS_META, ensure_ascii=False)
-fw_label = f"{mshort[final_week[:7]]} {int(final_week[8:10])}, {final_week[:4]}"
 
 peak_total = max(monthly[m['key']]['total'] for m in MONTHS_META)
 peak_label = {m['key']:m['short'] for m in MONTHS_META}[max(monthly, key=lambda k: monthly[k]['total'])]
@@ -387,6 +399,7 @@ body = f'''<body>
   <button class="main-nav-btn active" onclick="switchView('overview', this)">Monthly Overview</button>
   <button class="main-nav-btn" onclick="switchView('partners', this)">Partner Dynamics</button>
   <button class="main-nav-btn" onclick="switchView('inactive', this)">Inactive Stores</button>
+  <button class="main-nav-btn" onclick="switchView('inactive-jun', this)">Inactive since {since_short}</button>
 </nav>
 
 <div id="view-overview" class="view active">
@@ -572,6 +585,42 @@ body = f'''<body>
         <tbody id="churnTbody"></tbody>
       </table>
       <div class="partner-table-footer" id="churnFooter"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="view-inactive-jun" class="view">
+<div class="container">
+  <div class="section">
+    <p class="section-title">Inactive Since {since_label} — Not Reactivated</p>
+    <p class="chart-desc" style="margin:-8px 0 16px">Partners &amp; locations that went inactive in a week on or after {since_label} and have not become active again through {fw_label}.</p>
+    <div class="toolbar">
+      <input class="partner-search" type="text" id="jchSearch" placeholder="Search address or brand..." oninput="renderJChurn()" />
+      <div class="filter-group">
+        <button class="filter-btn active-all" id="jchSegAll" onclick="setJChSeg('all',this)">All</button>
+        <button class="filter-btn" id="jchSegEnt" onclick="setJChSeg('ent',this)">ENT</button>
+        <button class="filter-btn" id="jchSegMm" onclick="setJChSeg('mm',this)">MM</button>
+        <button class="filter-btn" id="jchSegSmb" onclick="setJChSeg('smb',this)">SMB</button>
+      </div>
+      <select class="sort-select" id="jchWeek" onchange="renderJChurn()"></select>
+      <span class="partner-count" id="jchCount"></span>
+    </div>
+    <div class="churn-summary" id="jchSummary"></div>
+    <div class="churn-chart-card">
+      <h3>Stores Going Inactive per Week (since {since_label})</h3>
+      <p class="chart-desc">Stores that disappeared from the weekly snapshot on or after {since_label} and never returned. Click a bar to filter the table.</p>
+      <div class="churn-chart-canvas"><canvas id="jchChart"></canvas></div>
+    </div>
+    <div class="partner-table-wrap">
+      <table class="partner-table">
+        <thead><tr>
+          <th>Address</th><th>Brand</th><th>Seg</th>
+          <th>First Active</th><th>Last Active</th><th>Inactive Since (Week)</th>
+        </tr></thead>
+        <tbody id="jchTbody"></tbody>
+      </table>
+      <div class="partner-table-footer" id="jchFooter"></div>
     </div>
   </div>
 </div>
@@ -851,6 +900,64 @@ function renderChurn() {{
     <div class="month-total-card" style="border-left:3px solid var(--smb)"><span class="mtc-label">SMB</span><div class="mtc-row"><span class="mtc-total">${{cnt('smb')}}</span></div><span class="mtc-sub">small business</span></div>`;
 }}
 
+/* ════ INACTIVE SINCE CUTOFF ════ */
+const jchData = DATA.churnSince;
+const jchWeekLabel = {{}}; DATA.churnSinceWeeks.forEach(o=>jchWeekLabel[o.week]=o.label);
+let jchSeg='all', jchChart=null;
+
+function buildJWeekSelect() {{
+  const sel=document.getElementById('jchWeek');
+  const opts=['<option value="all">All weeks</option>'];
+  DATA.churnSinceWeeks.filter(p=>p.count>0).slice().reverse().forEach(p=>{{
+    opts.push(`<option value="${{p.week}}">${{p.label}} (${{p.count}})</option>`);
+  }});
+  sel.innerHTML=opts.join('');
+}}
+function setJChSeg(seg, btn) {{
+  jchSeg=seg;
+  document.querySelectorAll('#jchSegAll,#jchSegEnt,#jchSegMm,#jchSegSmb').forEach(b=>b.className='filter-btn');
+  btn.classList.add(seg==='all'?'active-all':'active-'+seg);
+  buildJChart(); renderJChurn();
+}}
+function buildJChart() {{
+  const list=DATA.churnSinceWeeks;
+  const labels=list.map(p=>p.label);
+  const counts=list.map(p=>jchData.filter(c=>c.since===p.week && (jchSeg==='all'||c.seg===jchSeg)).length);
+  if(jchChart) jchChart.destroy();
+  jchChart=new Chart(document.getElementById('jchChart'),{{
+    type:'bar',
+    data:{{labels,datasets:[{{label:'Stores went inactive',data:counts,backgroundColor:'#dc2626'}}]}},
+    options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}}}},
+      onClick:(e,els)=>{{ if(els.length){{ document.getElementById('jchWeek').value=list[els[0].index].week; renderJChurn(); }} }},
+      scales:{{x:{{grid:{{display:false}},ticks:{{font:{{size:10}},maxRotation:60,minRotation:0}}}},y:{{grid:{{color:'#f0f0ef'}},ticks:{{font:{{size:11}},precision:0}}}}}}}}
+  }});
+}}
+function renderJChurn() {{
+  const search=document.getElementById('jchSearch').value.toLowerCase();
+  const week=document.getElementById('jchWeek').value;
+  const matchWeek=c=>week==='all'||c.since===week;
+  const matchSearch=c=>!search||c.addr.toLowerCase().includes(search)||c.brand.toLowerCase().includes(search);
+  const base=jchData.filter(c=>matchWeek(c)&&matchSearch(c));
+  const rows=base.filter(c=>jchSeg==='all'||c.seg===jchSeg);
+  rows.sort((a,b)=> a.since<b.since?1 : a.since>b.since?-1 : (a.brand<b.brand?-1 : a.brand>b.brand?1:0));
+  document.getElementById('jchTbody').innerHTML = rows.map(c=>`<tr>
+    <td class="addr-cell" title="${{c.addr}}">${{c.addr}}</td>
+    <td>${{c.brand}}</td>
+    <td><span class="badge ${{c.seg}}">${{SEG_LABEL[c.seg]}}</span></td>
+    <td class="num-cell">${{fmtDate(c.firstDate||c.first)}}</td>
+    <td class="num-cell">${{fmtDate(c.lastDate||c.last)}}</td>
+    <td>${{jchWeekLabel[c.since]||c.since}}</td>
+  </tr>`).join('') || `<tr><td colspan="6" class="empty-state">No stores match the filters</td></tr>`;
+  document.getElementById('jchCount').textContent=`${{rows.length}} store${{rows.length!==1?'s':''}}`;
+  document.getElementById('jchFooter').textContent=`Showing ${{rows.length}} of ${{jchData.length}} stores inactive since ${{DATA.sinceLabel}} · not reactivated through ${{DATA.fwLabel}}`;
+  const cnt=s=>base.filter(c=>c.seg===s).length;
+  document.getElementById('jchSummary').innerHTML=`
+    <div class="month-total-card"><span class="mtc-label">Total Inactive</span><div class="mtc-row"><span class="mtc-total">${{base.length}}</span></div><span class="mtc-sub">since ${{DATA.sinceLabel}}</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--ent)"><span class="mtc-label">ENT</span><div class="mtc-row"><span class="mtc-total">${{cnt('ent')}}</span></div><span class="mtc-sub">enterprise</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--mm)"><span class="mtc-label">MM</span><div class="mtc-row"><span class="mtc-total">${{cnt('mm')}}</span></div><span class="mtc-sub">mid-market</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--smb)"><span class="mtc-label">SMB</span><div class="mtc-row"><span class="mtc-total">${{cnt('smb')}}</span></div><span class="mtc-sub">small business</span></div>`;
+}}
+
 buildMonths();
 buildCharts();
 buildQuarterly();
@@ -862,6 +969,9 @@ renderPartnerTable();
 buildPeriodSelect();
 buildChurnChart();
 renderChurn();
+buildJWeekSelect();
+buildJChart();
+renderJChurn();
 </script>
 </body>
 </html>'''
