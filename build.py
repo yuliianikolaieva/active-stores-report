@@ -191,11 +191,14 @@ for r in rows:
 locations = []
 for p in sorted(provider_weeks):
     presence = ''.join('1' if w in provider_weeks[p] else '0' for w in weeks)
+    last_w = max(provider_weeks[p])
+    active_now = last_w == final_week
     locations.append({
         'name': p, 'city': provider_city.get(p, ''), 'brand': provider_rec[p][1],
-        'seg': provider_seg[p], 'first': provider_first_week[p], 'last': max(provider_weeks[p]),
+        'seg': provider_seg[p], 'first': provider_first_week[p], 'last': last_w,
         'firstDate': first_active_date.get(p, ''), 'lastDate': last_active_date.get(p, ''),
-        'w': presence,
+        'w': presence, 'activeNow': active_now,
+        'since': '' if active_now else nxt.get(last_w, ''),
     })
 
 weeks_meta = [{'w': w, 'label': f"{mshort[w[:7]]} {int(w[8:10])}"} for w in weeks]
@@ -584,7 +587,8 @@ body = f'''<body>
 <div class="container">
   <div class="section">
     <p class="section-title">Active Locations — Who Was Active (by Week / Month)</p>
-    <p class="chart-desc" style="margin:-8px 0 16px">Every location that had availability (was actually online) in the selected period. Monthly = the month's last weekly snapshot, matching the report totals.</p>
+    <p class="chart-desc" style="margin:-8px 0 16px">Every location that had availability (was actually online) in the selected period. "Inactive" means the store had <strong>no availability</strong> (was not online) since the shown week — the data does not carry a business reason (e.g. closed / paused). Monthly = the month's last weekly snapshot, matching the report totals.</p>
+    <div class="churn-summary" id="locSummary" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px"></div>
     <div class="toolbar">
       <input class="partner-search" type="text" id="locSearch" placeholder="Search location, brand or city..." oninput="renderLocations()" />
       <div class="filter-group">
@@ -597,15 +601,19 @@ body = f'''<body>
         <button class="filter-btn" id="locSegMm" onclick="setLocSeg('mm',this)">MM</button>
         <button class="filter-btn" id="locSegSmb" onclick="setLocSeg('smb',this)">SMB</button>
       </div>
+      <div class="filter-group">
+        <button class="filter-btn active-all" id="locStAll" onclick="setLocStatus('all',this)">All status</button>
+        <button class="filter-btn" id="locStActive" onclick="setLocStatus('active',this)">Active now</button>
+        <button class="filter-btn" id="locStInactive" onclick="setLocStatus('inactive',this)">Inactive now</button>
+      </div>
       <select class="sort-select" id="locPeriod" onchange="renderLocations()"></select>
       <span class="partner-count" id="locCount"></span>
     </div>
-    <div class="churn-summary" id="locSummary"></div>
     <div class="partner-table-wrap">
       <table class="partner-table">
         <thead><tr>
           <th>Location</th><th>City</th><th>Brand</th><th>Seg</th>
-          <th>First Active</th><th>Last Active</th>
+          <th>First Active</th><th>Last Active</th><th>Status</th>
         </tr></thead>
         <tbody id="locTbody"></tbody>
       </table>
@@ -1024,13 +1032,13 @@ function renderJChurn() {{
 
 /* ════ ACTIVE LOCATIONS ════ */
 const locData = DATA.locations;
-let locMode='week', locSeg='all';
+let locMode='week', locSeg='all', locStatus='all';
 
 function buildLocPeriodSelect() {{
   const sel=document.getElementById('locPeriod');
-  let opts;
-  if(locMode==='week') opts=DATA.weeksMeta.map((p,i)=>`<option value="${{i}}">${{p.label}}</option>`).reverse();
-  else opts=DATA.monthsLoc.map(m=>`<option value="${{m.endIdx}}">${{m.label}}</option>`).reverse();
+  let opts=['<option value="all">All — ever active</option>'];
+  if(locMode==='week') opts=opts.concat(DATA.weeksMeta.map((p,i)=>`<option value="${{i}}">Week: ${{p.label}}</option>`).reverse());
+  else opts=opts.concat(DATA.monthsLoc.map(m=>`<option value="${{m.endIdx}}">Month: ${{m.label}}</option>`).reverse());
   sel.innerHTML=opts.join('');
   sel.selectedIndex=0;
 }}
@@ -1046,16 +1054,27 @@ function setLocSeg(seg, btn) {{
   btn.classList.add(seg==='all'?'active-all':'active-'+seg);
   renderLocations();
 }}
+function setLocStatus(st, btn) {{
+  locStatus=st;
+  document.querySelectorAll('#locStAll,#locStActive,#locStInactive').forEach(b=>b.classList.remove('active-all'));
+  btn.classList.add('active-all');
+  renderLocations();
+}}
 function renderLocations() {{
   const search=document.getElementById('locSearch').value.toLowerCase();
   const sel=document.getElementById('locPeriod');
-  const idx=parseInt(sel.value);
+  const val=sel.value;
   const periodLabel=sel.selectedOptions[0]?sel.selectedOptions[0].textContent:'';
-  const inPeriod=l=>l.w.charAt(idx)==='1';
+  const inPeriod = val==='all' ? (l=>true) : (l=>l.w.charAt(parseInt(val))==='1');
   const matchSearch=l=>!search||l.name.toLowerCase().includes(search)||l.brand.toLowerCase().includes(search)||(l.city||'').toLowerCase().includes(search);
   const base=locData.filter(l=>inPeriod(l)&&matchSearch(l));
-  const rows=base.filter(l=>locSeg==='all'||l.seg===locSeg);
-  rows.sort((a,b)=> a.brand<b.brand?-1 : a.brand>b.brand?1 : (a.name<b.name?-1:1));
+  let rows=base.filter(l=>locSeg==='all'||l.seg===locSeg);
+  if(locStatus==='active') rows=rows.filter(l=>l.activeNow);
+  else if(locStatus==='inactive') rows=rows.filter(l=>!l.activeNow);
+  rows.sort((a,b)=> (a.activeNow-b.activeNow) || (a.brand<b.brand?-1:a.brand>b.brand?1:(a.name<b.name?-1:1)));
+  const statusCell = l => l.activeNow
+    ? `<span class="status-badge growing">Active</span>`
+    : `<span class="status-badge churned">Inactive</span> <span style="color:var(--text-tertiary);font-size:11px">since ${{fmtDate(l.since)}}</span>`;
   document.getElementById('locTbody').innerHTML = rows.map(l=>`<tr>
     <td class="addr-cell" title="${{l.name}}">${{l.name}}</td>
     <td>${{l.city||'—'}}</td>
@@ -1063,15 +1082,15 @@ function renderLocations() {{
     <td><span class="badge ${{l.seg}}">${{SEG_LABEL[l.seg]}}</span></td>
     <td class="num-cell">${{fmtDate(l.firstDate||l.first)}}</td>
     <td class="num-cell">${{fmtDate(l.lastDate||l.last)}}</td>
-  </tr>`).join('') || `<tr><td colspan="6" class="empty-state">No active locations match the filters</td></tr>`;
+    <td>${{statusCell(l)}}</td>
+  </tr>`).join('') || `<tr><td colspan="7" class="empty-state">No locations match the filters</td></tr>`;
   document.getElementById('locCount').textContent=`${{rows.length}} location${{rows.length!==1?'s':''}}`;
-  document.getElementById('locFooter').textContent=`${{rows.length}} active in ${{periodLabel}} · of ${{locData.length}} locations ever active through ${{DATA.fwLabel}}`;
-  const cnt=s=>base.filter(l=>l.seg===s).length;
+  document.getElementById('locFooter').textContent=`Showing ${{rows.length}} of ${{base.length}} in "${{periodLabel}}" · full roster ${{locData.length}} locations ever active (through ${{DATA.fwLabel}})`;
+  const activeNow=base.filter(l=>l.activeNow).length;
   document.getElementById('locSummary').innerHTML=`
-    <div class="month-total-card"><span class="mtc-label">Total Active</span><div class="mtc-row"><span class="mtc-total">${{base.length}}</span></div><span class="mtc-sub">${{periodLabel}}</span></div>
-    <div class="month-total-card" style="border-left:3px solid var(--ent)"><span class="mtc-label">ENT</span><div class="mtc-row"><span class="mtc-total">${{cnt('ent')}}</span></div><span class="mtc-sub">enterprise</span></div>
-    <div class="month-total-card" style="border-left:3px solid var(--mm)"><span class="mtc-label">MM</span><div class="mtc-row"><span class="mtc-total">${{cnt('mm')}}</span></div><span class="mtc-sub">mid-market</span></div>
-    <div class="month-total-card" style="border-left:3px solid var(--smb)"><span class="mtc-label">SMB</span><div class="mtc-row"><span class="mtc-total">${{cnt('smb')}}</span></div><span class="mtc-sub">small business</span></div>`;
+    <div class="month-total-card"><span class="mtc-label">Total (${{periodLabel}})</span><div class="mtc-row"><span class="mtc-total">${{base.length}}</span></div><span class="mtc-sub">locations</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--accent)"><span class="mtc-label">Active now</span><div class="mtc-row"><span class="mtc-total">${{activeNow}}</span></div><span class="mtc-sub">online in ${{DATA.fwLabel}}</span></div>
+    <div class="month-total-card" style="border-left:3px solid #dc2626"><span class="mtc-label">Inactive now</span><div class="mtc-row"><span class="mtc-total">${{base.length-activeNow}}</span></div><span class="mtc-sub">not online since</span></div>`;
 }}
 
 buildMonths();
