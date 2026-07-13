@@ -217,14 +217,20 @@ DATA = {
     'locations': locations, 'weeksMeta': weeks_meta, 'monthsLoc': months_loc,
 }
 
-MONTHS_META = [
-    {'key':'jan','label':'January 2026','short':'Jan','baseline':True},
-    {'key':'feb','label':'February 2026','short':'Feb'},
-    {'key':'mar','label':'March 2026','short':'Mar'},
-    {'key':'apr','label':'April 2026','short':'Apr'},
-    {'key':'may','label':'May 2026','short':'May'},
-    {'key':'jun','label':'June 2026','short':'Jun','mtd':True},
-]
+# Built dynamically from the months present in the data (first month = baseline,
+# latest month = month-to-date), so the report keeps working as new months arrive.
+MONTHS_META = []
+for _i, _ms in enumerate(month_strs):
+    _m = int(_ms[5:7])
+    _meta = {'key': mkey[_ms], 'label': f"{MONF[_m]} {_ms[:4]}", 'short': MON[_m]}
+    if _i == 0:
+        _meta['baseline'] = True
+    if _ms == latest_month:
+        _meta['mtd'] = True
+    MONTHS_META.append(_meta)
+
+period_label = f"{MON[int(month_strs[0][5:7])]} \u2013 {MON[int(latest_month[5:7])]} {latest_month[:4]}"
+n_months = len(month_strs)
 
 data_js = json.dumps(DATA, ensure_ascii=False)
 meta_js = json.dumps(MONTHS_META, ensure_ascii=False)
@@ -415,12 +421,12 @@ body = f'''<body>
 <div class="page-header">
   <div class="container">
     <h1>Active Stores — Monthly Dynamics</h1>
-    <p class="subtitle">New store openings, business-segment breakdown, and brand tracking · Ukraine · Jan – Jun 2026</p>
+    <p class="subtitle">New store openings, business-segment breakdown, and brand tracking · Ukraine · {period_label}</p>
     <div class="header-meta">
       <span class="tag">Bolt Store</span>
       <span class="tag">ENT · MM · SMB</span>
       <span class="tag">Business Segment</span>
-      <span class="tag">6 months</span>
+      <span class="tag">{n_months} months</span>
       <span class="tag">Weekly · through {fw_label}</span>
     </div>
   </div>
