@@ -1,4 +1,4 @@
-import csv, json, os
+import csv, json, os, re
 from collections import defaultdict
 from pathlib import Path
 
@@ -29,6 +29,7 @@ def seg_of(r):
     return 'ent' if r['Delivery Vertical'] == 'store_3p_ent' else 'smb'
 
 def is_archived(p): return '[Archived]' in p
+def clean_name(p): return re.sub(r'\s*\[Archived\]\s*', ' ', p).strip()
 
 # Data is WEEKLY snapshots (YYYY-MM-DD). Monthly metrics use the last snapshot of each month.
 weeks = sorted(set(r['Report Time (dynamic)'] for r in rows))
@@ -44,14 +45,17 @@ brand_week_stores = defaultdict(lambda: defaultdict(set))
 brand_seg_votes = defaultdict(lambda: defaultdict(int))
 provider_weeks = defaultdict(set)
 provider_rec = {}   # provider -> [week, brand, seg] of its latest active snapshot
+provider_archived = {}   # provider -> was it archived (name carries the [Archived] marker)
 
+# Archived locations are kept (counted as active in the weeks they actually worked) and
+# flagged, so they can be shown with an "Archived" status instead of being dropped.
 for r in rows:
     p = r['Provider Name']
-    if is_archived(p): continue
-    brand = r['Brand Name'].strip()
+    brand = clean_name(r['Brand Name']).strip()
     if not brand: continue
     s = seg_of(r)
     w = r['Report Time (dynamic)']
+    provider_archived[p] = is_archived(p)
     brand_week_stores[brand][w].add(p)
     brand_seg_votes[brand][s] += 1
     provider_weeks[p].add(w)
@@ -127,9 +131,10 @@ for p in provider_weeks:
         continue
     since = nxt[last]
     churn.append({
-        'addr': p, 'brand': provider_rec[p][1], 'seg': provider_seg[p],
+        'addr': clean_name(p), 'brand': provider_rec[p][1], 'seg': provider_seg[p],
         'first': provider_first_week[p], 'last': last, 'since': since, 'month': since[:7],
         'firstDate': first_active_date.get(p, ''), 'lastDate': last_active_date.get(p, ''),
+        'archived': provider_archived.get(p, False),
     })
 churn.sort(key=lambda x: (x['since'], x['brand'], x['addr']), reverse=True)
 
@@ -181,7 +186,7 @@ week_index = {w: i for i, w in enumerate(weeks)}
 provider_city, _prov_latest_w = {}, {}
 for r in rows:
     p = r['Provider Name']
-    if is_archived(p) or not r['Brand Name'].strip():
+    if not r['Brand Name'].strip():
         continue
     w = r['Report Time (dynamic)']
     if p not in _prov_latest_w or w >= _prov_latest_w[p]:
@@ -194,11 +199,12 @@ for p in sorted(provider_weeks):
     last_w = max(provider_weeks[p])
     active_now = last_w == final_week
     locations.append({
-        'name': p, 'city': provider_city.get(p, ''), 'brand': provider_rec[p][1],
+        'name': clean_name(p), 'city': provider_city.get(p, ''), 'brand': provider_rec[p][1],
         'seg': provider_seg[p], 'first': provider_first_week[p], 'last': last_w,
         'firstDate': first_active_date.get(p, ''), 'lastDate': last_active_date.get(p, ''),
         'w': presence, 'activeNow': active_now,
         'since': '' if active_now else nxt.get(last_w, ''),
+        'archived': provider_archived.get(p, False),
     })
 
 weeks_meta = [{'w': w, 'label': f"{mshort[w[:7]]} {int(w[8:10])}"} for w in weeks]
@@ -371,6 +377,7 @@ table.partner-table tbody tr:hover td { background:#fafaf9; }
 .status-badge.stable { background:var(--bg); color:var(--text-secondary); border:1px solid var(--border); }
 .status-badge.new { background:var(--accent-light); color:var(--accent); }
 .status-badge.churned { background:#fef3c7; color:#b45309; }
+.status-badge.archived { background:#e7e5e4; color:#57534e; }
 .partner-table-footer { padding:10px 14px; font-size:11px; color:var(--text-secondary); border-top:1px solid var(--border); background:var(--bg); }
 .monthly-totals { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:12px; }
 .month-total-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 16px; display:flex; flex-direction:column; gap:4px; }
@@ -593,8 +600,8 @@ body = f'''<body>
 <div class="container">
   <div class="section">
     <p class="section-title">Active Locations — Who Was Active (by Week / Month)</p>
-    <p class="chart-desc" style="margin:-8px 0 16px">Every location that had availability (was actually online) in the selected period. "Inactive" means the store had <strong>no availability</strong> (was not online) since the shown week — the data does not carry a business reason (e.g. closed / paused). Monthly = the month's last weekly snapshot, matching the report totals.</p>
-    <div class="churn-summary" id="locSummary" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px"></div>
+    <p class="chart-desc" style="margin:-8px 0 16px">Every location that had availability (was actually online) in the selected period. <strong>Inactive</strong> = no availability since the shown week; <strong>Archived</strong> = location was removed from the catalog (last online date shown). Monthly = the month's last weekly snapshot, matching the report totals.</p>
+    <div class="churn-summary" id="locSummary" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px"></div>
     <div class="toolbar">
       <input class="partner-search" type="text" id="locSearch" placeholder="Search location, brand or city..." oninput="renderLocations()" />
       <div class="filter-group">
@@ -611,6 +618,7 @@ body = f'''<body>
         <button class="filter-btn active-all" id="locStAll" onclick="setLocStatus('all',this)">All status</button>
         <button class="filter-btn" id="locStActive" onclick="setLocStatus('active',this)">Active now</button>
         <button class="filter-btn" id="locStInactive" onclick="setLocStatus('inactive',this)">Inactive now</button>
+        <button class="filter-btn" id="locStArchived" onclick="setLocStatus('archived',this)">Archived</button>
       </div>
       <select class="sort-select" id="locPeriod" onchange="renderLocations()"></select>
       <span class="partner-count" id="locCount"></span>
@@ -1062,7 +1070,7 @@ function setLocSeg(seg, btn) {{
 }}
 function setLocStatus(st, btn) {{
   locStatus=st;
-  document.querySelectorAll('#locStAll,#locStActive,#locStInactive').forEach(b=>b.classList.remove('active-all'));
+  document.querySelectorAll('#locStAll,#locStActive,#locStInactive,#locStArchived').forEach(b=>b.classList.remove('active-all'));
   btn.classList.add('active-all');
   renderLocations();
 }}
@@ -1075,11 +1083,13 @@ function renderLocations() {{
   const matchSearch=l=>!search||l.name.toLowerCase().includes(search)||l.brand.toLowerCase().includes(search)||(l.city||'').toLowerCase().includes(search);
   const base=locData.filter(l=>inPeriod(l)&&matchSearch(l));
   let rows=base.filter(l=>locSeg==='all'||l.seg===locSeg);
-  if(locStatus==='active') rows=rows.filter(l=>l.activeNow);
-  else if(locStatus==='inactive') rows=rows.filter(l=>!l.activeNow);
+  if(locStatus==='active') rows=rows.filter(l=>l.activeNow&&!l.archived);
+  else if(locStatus==='inactive') rows=rows.filter(l=>!l.activeNow&&!l.archived);
+  else if(locStatus==='archived') rows=rows.filter(l=>l.archived);
   rows.sort((a,b)=> (a.activeNow-b.activeNow) || (a.brand<b.brand?-1:a.brand>b.brand?1:(a.name<b.name?-1:1)));
-  const statusCell = l => l.activeNow
-    ? `<span class="status-badge growing">Active</span>`
+  const statusCell = l => l.archived
+    ? `<span class="status-badge archived">Archived</span> <span style="color:var(--text-tertiary);font-size:11px">last online ${{fmtDate(l.lastDate||l.last)}}</span>`
+    : l.activeNow ? `<span class="status-badge growing">Active</span>`
     : `<span class="status-badge churned">Inactive</span> <span style="color:var(--text-tertiary);font-size:11px">since ${{fmtDate(l.since)}}</span>`;
   document.getElementById('locTbody').innerHTML = rows.map(l=>`<tr>
     <td class="addr-cell" title="${{l.name}}">${{l.name}}</td>
@@ -1092,11 +1102,14 @@ function renderLocations() {{
   </tr>`).join('') || `<tr><td colspan="7" class="empty-state">No locations match the filters</td></tr>`;
   document.getElementById('locCount').textContent=`${{rows.length}} location${{rows.length!==1?'s':''}}`;
   document.getElementById('locFooter').textContent=`Showing ${{rows.length}} of ${{base.length}} in "${{periodLabel}}" · full roster ${{locData.length}} locations ever active (through ${{DATA.fwLabel}})`;
-  const activeNow=base.filter(l=>l.activeNow).length;
+  const archN=base.filter(l=>l.archived).length;
+  const activeNow=base.filter(l=>l.activeNow&&!l.archived).length;
+  const inactiveNow=base.length-activeNow-archN;
   document.getElementById('locSummary').innerHTML=`
     <div class="month-total-card"><span class="mtc-label">Total (${{periodLabel}})</span><div class="mtc-row"><span class="mtc-total">${{base.length}}</span></div><span class="mtc-sub">locations</span></div>
     <div class="month-total-card" style="border-left:3px solid var(--accent)"><span class="mtc-label">Active now</span><div class="mtc-row"><span class="mtc-total">${{activeNow}}</span></div><span class="mtc-sub">online in ${{DATA.fwLabel}}</span></div>
-    <div class="month-total-card" style="border-left:3px solid #dc2626"><span class="mtc-label">Inactive now</span><div class="mtc-row"><span class="mtc-total">${{base.length-activeNow}}</span></div><span class="mtc-sub">not online since</span></div>`;
+    <div class="month-total-card" style="border-left:3px solid #dc2626"><span class="mtc-label">Inactive now</span><div class="mtc-row"><span class="mtc-total">${{inactiveNow}}</span></div><span class="mtc-sub">not online since</span></div>
+    <div class="month-total-card" style="border-left:3px solid #78716c"><span class="mtc-label">Archived</span><div class="mtc-row"><span class="mtc-total">${{archN}}</span></div><span class="mtc-sub">removed from catalog</span></div>`;
 }}
 
 buildMonths();
