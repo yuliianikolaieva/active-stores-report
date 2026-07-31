@@ -54,8 +54,8 @@ SELECT
     p.business_segment,
     p.city_name,
     1                      AS active_merchant_count
-FROM hive_metastore.ng_delivery_spark.etl_delivery_provider_daily_availability a
-JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON a.provider_id = p.provider_id
+FROM main.ng_delivery.etl_delivery_provider_daily_availability a
+JOIN main.ng_delivery.dim_provider_v2 p ON a.provider_id = p.provider_id
 WHERE p.country_code = 'ua'
   AND p.delivery_vertical LIKE 'store%'
   AND a.created_date >= DATE'{START}'
@@ -73,8 +73,8 @@ SELECT
     p.provider_name,
     DATE_FORMAT(MIN(a.created_date), 'yyyy-MM-dd') AS first_active_date,
     DATE_FORMAT(MAX(a.created_date), 'yyyy-MM-dd') AS last_active_date
-FROM hive_metastore.ng_delivery_spark.etl_delivery_provider_daily_availability a
-JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON a.provider_id = p.provider_id
+FROM main.ng_delivery.etl_delivery_provider_daily_availability a
+JOIN main.ng_delivery.dim_provider_v2 p ON a.provider_id = p.provider_id
 WHERE p.country_code = 'ua'
   AND p.delivery_vertical LIKE 'store%'
   AND a.created_date >= DATE'{START}'
