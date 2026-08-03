@@ -713,7 +713,7 @@ function renderChurn() {
   const rows = base.filter(c=>chSeg==='all'||c.seg===chSeg);
   rows.sort((a,b)=> a.brand<b.brand?-1 : a.brand>b.brand?1 : (a.since<b.since?1 : a.since>b.since?-1:0));
   document.getElementById('churnTbody').innerHTML = rows.map(c=>`<tr>
-    <td class="addr-cell" title="${c.addr}">${c.addr}</td>
+    <td class="addr-cell" title="${c.addr}">${c.addr}${c.archived?' <span class="status-badge archived">Archived</span>':''}</td>
     <td>${c.brand}</td>
     <td><span class="badge ${c.seg}">${SEG_LABEL[c.seg]}</span></td>
     <td class="num-cell">${fmtDate(c.firstDate||c.first)}</td>
@@ -771,7 +771,7 @@ function renderJChurn() {
   const rows=base.filter(c=>jchSeg==='all'||c.seg===jchSeg);
   rows.sort((a,b)=> a.since<b.since?1 : a.since>b.since?-1 : (a.brand<b.brand?-1 : a.brand>b.brand?1:0));
   document.getElementById('jchTbody').innerHTML = rows.map(c=>`<tr>
-    <td class="addr-cell" title="${c.addr}">${c.addr}</td>
+    <td class="addr-cell" title="${c.addr}">${c.addr}${c.archived?' <span class="status-badge archived">Archived</span>':''}</td>
     <td>${c.brand}</td>
     <td><span class="badge ${c.seg}">${SEG_LABEL[c.seg]}</span></td>
     <td class="num-cell">${fmtDate(c.firstDate||c.first)}</td>
