@@ -30,6 +30,10 @@ def seg_of(r):
 
 def is_archived(p): return '[Archived]' in p
 def clean_name(p): return re.sub(r'\s*\[Archived\]\s*', ' ', p).strip()
+# In the new Unity Catalog data, archived/removed locations are flagged by
+# provider_status = 'deleted' (the legacy "[Archived]" name marker is kept as a fallback).
+def row_archived(r):
+    return (r.get('Provider Status') or '').strip().lower() == 'deleted' or is_archived(r['Provider Name'])
 
 # Data is WEEKLY snapshots (YYYY-MM-DD). Monthly metrics use the last snapshot of each month.
 weeks = sorted(set(r['Report Time (dynamic)'] for r in rows))
@@ -55,7 +59,7 @@ for r in rows:
     if not brand: continue
     s = seg_of(r)
     w = r['Report Time (dynamic)']
-    provider_archived[p] = is_archived(p)
+    provider_archived[p] = provider_archived.get(p, False) or row_archived(r)
     brand_week_stores[brand][w].add(p)
     brand_seg_votes[brand][s] += 1
     provider_weeks[p].add(w)

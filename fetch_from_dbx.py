@@ -53,6 +53,7 @@ SELECT
     p.business_segment_code_v2,
     p.business_segment,
     p.city_name,
+    p.provider_status,
     1                      AS active_merchant_count
 FROM main.ng_delivery.etl_delivery_provider_daily_availability a
 JOIN main.ng_delivery.dim_provider_v2 p ON a.provider_id = p.provider_id
@@ -60,7 +61,7 @@ WHERE p.country_code = 'ua'
   AND p.delivery_vertical LIKE 'store%'
   AND a.created_date >= DATE'{START}'
   AND a.created_date <= DATE_SUB(DATE_TRUNC('week', CURRENT_DATE()), 1)  -- only complete weeks
-GROUP BY 1,2,3,4,5,6,7,8
+GROUP BY 1,2,3,4,5,6,7,8,9
 HAVING SUM(a.active_time) > 0
 ORDER BY report_time, brand_name, provider_name
 """
@@ -93,12 +94,12 @@ def main():
 
     header = ["", "Report Time (dynamic)", "Country Name", "Delivery Vertical",
               "Provider Name", "Brand Name", "Business Segment Code V2",
-              "Business Segment", "City Name", "Active Merchant Count, #"]
+              "Business Segment", "City Name", "Provider Status", "Active Merchant Count, #"]
     with open(OUT, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(header)
         for i, r in enumerate(rows, 1):
-            w.writerow([i, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]])
+            w.writerow([i, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]])
     print(f"Wrote {len(rows)} rows -> {OUT}")
 
     cur.execute(DATES_QUERY)
