@@ -693,6 +693,11 @@ body = f'''<body>
         <button class="filter-btn" id="jchSegMm" onclick="setJChSeg('mm',this)">MM</button>
         <button class="filter-btn" id="jchSegSmb" onclick="setJChSeg('smb',this)">SMB</button>
       </div>
+      <div class="filter-group">
+        <button class="filter-btn active-all" id="jchArchAll" onclick="setJChArch('all',this)">All</button>
+        <button class="filter-btn" id="jchArchHide" onclick="setJChArch('hide',this)">Hide archived</button>
+        <button class="filter-btn" id="jchArchOnly" onclick="setJChArch('only',this)">Archived only</button>
+      </div>
       <select class="sort-select" id="jchWeek" onchange="renderJChurn()"></select>
       <span class="partner-count" id="jchCount"></span>
     </div>
@@ -993,7 +998,8 @@ function renderChurn() {{
 /* ════ INACTIVE SINCE CUTOFF ════ */
 const jchData = DATA.churnSince;
 const jchWeekLabel = {{}}; DATA.churnSinceWeeks.forEach(o=>jchWeekLabel[o.week]=o.label);
-let jchSeg='all', jchChart=null;
+let jchSeg='all', jchArch='all', jchChart=null;
+const jchMatchArch = c => jchArch==='all' || (jchArch==='hide' ? !c.archived : !!c.archived);
 
 function buildJWeekSelect() {{
   const sel=document.getElementById('jchWeek');
@@ -1009,10 +1015,16 @@ function setJChSeg(seg, btn) {{
   btn.classList.add(seg==='all'?'active-all':'active-'+seg);
   buildJChart(); renderJChurn();
 }}
+function setJChArch(mode, btn) {{
+  jchArch=mode;
+  document.querySelectorAll('#jchArchAll,#jchArchHide,#jchArchOnly').forEach(b=>b.classList.remove('active-all'));
+  btn.classList.add('active-all');
+  buildJChart(); renderJChurn();
+}}
 function buildJChart() {{
   const list=DATA.churnSinceWeeks;
   const labels=list.map(p=>p.label);
-  const counts=list.map(p=>jchData.filter(c=>c.since===p.week && (jchSeg==='all'||c.seg===jchSeg)).length);
+  const counts=list.map(p=>jchData.filter(c=>c.since===p.week && (jchSeg==='all'||c.seg===jchSeg) && jchMatchArch(c)).length);
   if(jchChart) jchChart.destroy();
   jchChart=new Chart(document.getElementById('jchChart'),{{
     type:'bar',
@@ -1027,7 +1039,7 @@ function renderJChurn() {{
   const week=document.getElementById('jchWeek').value;
   const matchWeek=c=>week==='all'||c.since===week;
   const matchSearch=c=>!search||c.addr.toLowerCase().includes(search)||c.brand.toLowerCase().includes(search);
-  const base=jchData.filter(c=>matchWeek(c)&&matchSearch(c));
+  const base=jchData.filter(c=>matchWeek(c)&&matchSearch(c)&&jchMatchArch(c));
   const rows=base.filter(c=>jchSeg==='all'||c.seg===jchSeg);
   rows.sort((a,b)=> a.since<b.since?1 : a.since>b.since?-1 : (a.brand<b.brand?-1 : a.brand>b.brand?1:0));
   document.getElementById('jchTbody').innerHTML = rows.map(c=>`<tr>
