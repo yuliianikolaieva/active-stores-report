@@ -945,15 +945,15 @@ function exportCells(rows) {{
   return [head,...body];
 }}
 function copyForSheets(rows, btn) {{
-  const tsv=exportCells(rows).map(r=>r.map(x=>String(x==null?'':x).replace(/[\t\n]/g,' ')).join('\t')).join('\n');
+  const tsv=exportCells(rows).map(r=>r.map(x=>String(x==null?'':x).replace(/[\\t\\n]/g,' ')).join('\\t')).join('\\n');
   navigator.clipboard.writeText(tsv).then(()=>{{
     const t=btn.textContent; btn.textContent='Copied! Paste into Sheets'; setTimeout(()=>btn.textContent=t,1800);
   }}).catch(()=>alert('Copy failed — use Download CSV instead.'));
 }}
 function downloadCsv(rows, filename) {{
-  const esc=x=>{{ x=String(x==null?'':x); return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x; }};
-  const csv=exportCells(rows).map(r=>r.map(esc).join(',')).join('\n');
-  const blob=new Blob(['\ufeff'+csv],{{type:'text/csv;charset=utf-8;'}});
+  const esc=x=>{{ x=String(x==null?'':x); return /[",\\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x; }};
+  const csv=exportCells(rows).map(r=>r.map(esc).join(',')).join('\\n');
+  const blob=new Blob(['\\ufeff'+csv],{{type:'text/csv;charset=utf-8;'}});
   const url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }}
