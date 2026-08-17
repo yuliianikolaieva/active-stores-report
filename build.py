@@ -976,7 +976,7 @@ function renderChurn() {{
   const matchSearch = c => !search || c.addr.toLowerCase().includes(search) || c.brand.toLowerCase().includes(search);
   const base = churnData.filter(c=>matchPeriod(c) && matchSearch(c));
   const rows = base.filter(c=>chSeg==='all'||c.seg===chSeg);
-  rows.sort((a,b)=> a.brand<b.brand?-1 : a.brand>b.brand?1 : (a.since<b.since?1 : a.since>b.since?-1:0));
+  rows.sort((a,b)=> a.brand.localeCompare(b.brand,'uk') || a.addr.localeCompare(b.addr,'uk'));
   document.getElementById('churnTbody').innerHTML = rows.map(c=>`<tr>
     <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{c.archived?' <span class="status-badge archived">Archived</span>':''}}</td>
     <td>${{c.brand}}</td>
@@ -1041,7 +1041,7 @@ function renderJChurn() {{
   const matchSearch=c=>!search||c.addr.toLowerCase().includes(search)||c.brand.toLowerCase().includes(search);
   const base=jchData.filter(c=>matchWeek(c)&&matchSearch(c)&&jchMatchArch(c));
   const rows=base.filter(c=>jchSeg==='all'||c.seg===jchSeg);
-  rows.sort((a,b)=> a.since<b.since?1 : a.since>b.since?-1 : (a.brand<b.brand?-1 : a.brand>b.brand?1:0));
+  rows.sort((a,b)=> a.brand.localeCompare(b.brand,'uk') || a.addr.localeCompare(b.addr,'uk'));
   document.getElementById('jchTbody').innerHTML = rows.map(c=>`<tr>
     <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{c.archived?' <span class="status-badge archived">Archived</span>':''}}</td>
     <td>${{c.brand}}</td>
