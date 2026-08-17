@@ -658,6 +658,10 @@ body = f'''<body>
         <button class="filter-btn" id="chSegSmb" onclick="setChSeg('smb',this)">SMB</button>
       </div>
       <select class="sort-select" id="churnPeriod" onchange="renderChurn()"></select>
+      <div class="filter-group">
+        <button class="filter-btn" onclick="exportChurnTSV(this)">Copy for Google Sheets</button>
+        <button class="filter-btn" onclick="exportChurnCSV()">Download CSV</button>
+      </div>
       <span class="partner-count" id="churnCount"></span>
     </div>
     <div class="churn-summary" id="churnSummary"></div>
@@ -699,6 +703,10 @@ body = f'''<body>
         <button class="filter-btn" id="jchArchOnly" onclick="setJChArch('only',this)">Archived only</button>
       </div>
       <select class="sort-select" id="jchWeek" onchange="renderJChurn()"></select>
+      <div class="filter-group">
+        <button class="filter-btn" onclick="exportJchTSV(this)">Copy for Google Sheets</button>
+        <button class="filter-btn" onclick="exportJchCSV()">Download CSV</button>
+      </div>
       <span class="partner-count" id="jchCount"></span>
     </div>
     <div class="churn-summary" id="jchSummary"></div>
@@ -929,6 +937,31 @@ const monthLabel = {{}}; DATA.churnMonths.forEach(o=>monthLabel[o.month]=o.label
 function fmtDate(d) {{ return d ? MONJS[parseInt(d.slice(5,7))-1]+' '+parseInt(d.slice(8,10)) : '—'; }}
 let chMode='week', chSeg='all', churnChart=null;
 
+/* ── Export helpers (respect current filters) ── */
+let churnRowsCurrent=[], jchRowsCurrent=[];
+function exportCells(rows) {{
+  const head=['Address','Brand','Segment','First Active','Last Active','Inactive Since','Archived'];
+  const body=rows.map(c=>[c.addr,c.brand,SEG_LABEL[c.seg],c.firstDate||c.first,c.lastDate||c.last,c.since,c.archived?'Yes':'No']);
+  return [head,...body];
+}}
+function copyForSheets(rows, btn) {{
+  const tsv=exportCells(rows).map(r=>r.map(x=>String(x==null?'':x).replace(/[\t\n]/g,' ')).join('\t')).join('\n');
+  navigator.clipboard.writeText(tsv).then(()=>{{
+    const t=btn.textContent; btn.textContent='Copied! Paste into Sheets'; setTimeout(()=>btn.textContent=t,1800);
+  }}).catch(()=>alert('Copy failed — use Download CSV instead.'));
+}}
+function downloadCsv(rows, filename) {{
+  const esc=x=>{{ x=String(x==null?'':x); return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x; }};
+  const csv=exportCells(rows).map(r=>r.map(esc).join(',')).join('\n');
+  const blob=new Blob(['\ufeff'+csv],{{type:'text/csv;charset=utf-8;'}});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}}
+function exportChurnTSV(btn) {{ copyForSheets(churnRowsCurrent, btn); }}
+function exportChurnCSV() {{ downloadCsv(churnRowsCurrent, 'inactive-stores.csv'); }}
+function exportJchTSV(btn) {{ copyForSheets(jchRowsCurrent, btn); }}
+function exportJchCSV() {{ downloadCsv(jchRowsCurrent, 'inactive-since-jun1.csv'); }}
+
 function buildPeriodSelect() {{
   const sel=document.getElementById('churnPeriod');
   const list = chMode==='week' ? DATA.churnWeeks : DATA.churnMonths;
@@ -977,6 +1010,7 @@ function renderChurn() {{
   const base = churnData.filter(c=>matchPeriod(c) && matchSearch(c));
   const rows = base.filter(c=>chSeg==='all'||c.seg===chSeg);
   rows.sort((a,b)=> a.brand.localeCompare(b.brand,'uk') || a.addr.localeCompare(b.addr,'uk'));
+  churnRowsCurrent = rows;
   document.getElementById('churnTbody').innerHTML = rows.map(c=>`<tr>
     <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{c.archived?' <span class="status-badge archived">Archived</span>':''}}</td>
     <td>${{c.brand}}</td>
@@ -1042,6 +1076,7 @@ function renderJChurn() {{
   const base=jchData.filter(c=>matchWeek(c)&&matchSearch(c)&&jchMatchArch(c));
   const rows=base.filter(c=>jchSeg==='all'||c.seg===jchSeg);
   rows.sort((a,b)=> a.brand.localeCompare(b.brand,'uk') || a.addr.localeCompare(b.addr,'uk'));
+  jchRowsCurrent = rows;
   document.getElementById('jchTbody').innerHTML = rows.map(c=>`<tr>
     <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{c.archived?' <span class="status-badge archived">Archived</span>':''}}</td>
     <td>${{c.brand}}</td>
