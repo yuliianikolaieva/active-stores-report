@@ -5,6 +5,7 @@ from pathlib import Path
 BASE = str(Path(__file__).resolve().parent)
 SRC = BASE + "/active_stores_from_dbx.csv"
 SRC_DATES = BASE + "/active_dates_from_dbx.csv"
+SRC_STATUS = BASE + "/active_status_from_dbx.csv"
 OUT = BASE + "/index.html"
 
 rows = list(csv.DictReader(open(SRC)))
@@ -16,6 +17,17 @@ if os.path.exists(SRC_DATES):
     for r in csv.DictReader(open(SRC_DATES)):
         first_active_date[r['provider_name']] = r['first_active_date']
         last_active_date[r['provider_name']] = r['last_active_date']
+
+# Latest lifecycle status per provider (onboarding / hidden / deleted / ready_for_work)
+# with the date it changed and the reason, from provider_lifecycle_status_log.
+# The CSV is ordered oldest→newest, so the last write per name wins (= most recent).
+lc_status, lc_since, lc_reason = {}, {}, {}
+if os.path.exists(SRC_STATUS):
+    for r in csv.DictReader(open(SRC_STATUS)):
+        n = r['provider_name']
+        lc_status[n] = r['lifecycle_status']
+        lc_since[n] = r['status_since']
+        lc_reason[n] = r['status_reason']
 SEGS = ['ent','mm','smb']
 MON  = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'}
 MONF = {1:'January',2:'February',3:'March',4:'April',5:'May',6:'June',7:'July',8:'August',9:'September',10:'October',11:'November',12:'December'}
@@ -139,6 +151,7 @@ for p in provider_weeks:
         'first': provider_first_week[p], 'last': last, 'since': since, 'month': since[:7],
         'firstDate': first_active_date.get(p, ''), 'lastDate': last_active_date.get(p, ''),
         'archived': provider_archived.get(p, False),
+        'lcStatus': lc_status.get(p, ''), 'statusSince': lc_since.get(p, ''), 'statusReason': lc_reason.get(p, ''),
     })
 churn.sort(key=lambda x: (x['since'], x['brand'], x['addr']), reverse=True)
 
@@ -382,6 +395,8 @@ table.partner-table tbody tr:hover td { background:#fafaf9; }
 .status-badge.new { background:var(--accent-light); color:var(--accent); }
 .status-badge.churned { background:#fef3c7; color:#b45309; }
 .status-badge.archived { background:#e7e5e4; color:#57534e; }
+.status-badge.hidden { background:#e0e7ff; color:#4338ca; }
+.status-badge.onboarding { background:#cffafe; color:#0e7490; }
 .partner-table-footer { padding:10px 14px; font-size:11px; color:var(--text-secondary); border-top:1px solid var(--border); background:var(--bg); }
 .monthly-totals { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:12px; }
 .month-total-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 16px; display:flex; flex-direction:column; gap:4px; }
@@ -927,6 +942,14 @@ const MONJS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
 const weekLabel = {{}}; DATA.churnWeeks.forEach(o=>weekLabel[o.week]=o.label);
 const monthLabel = {{}}; DATA.churnMonths.forEach(o=>monthLabel[o.month]=o.label);
 function fmtDate(d) {{ return d ? MONJS[parseInt(d.slice(5,7))-1]+' '+parseInt(d.slice(8,10)) : '—'; }}
+const LC_MAP = {{deleted:['archived','Archived'], hidden:['hidden','Hidden'], onboarding:['onboarding','Onboarding']}};
+function statusBadge(c) {{
+  const s=LC_MAP[c.lcStatus]; if(!s) return '';
+  const since=c.statusSince?fmtDate(c.statusSince):'';
+  const reasonTxt=(c.statusReason||'').replace(/"/g,'');
+  const title=`${{s[1]}}${{since?' since '+since:''}}${{reasonTxt?' · '+reasonTxt:''}}`;
+  return ` <span class="status-badge ${{s[0]}}" title="${{title}}">${{s[1]}}${{since?' · '+since:''}}</span>`;
+}}
 let chMode='week', chSeg='all', churnChart=null;
 
 function buildPeriodSelect() {{
@@ -978,7 +1001,7 @@ function renderChurn() {{
   const rows = base.filter(c=>chSeg==='all'||c.seg===chSeg);
   rows.sort((a,b)=> a.brand.localeCompare(b.brand,'uk') || a.addr.localeCompare(b.addr,'uk'));
   document.getElementById('churnTbody').innerHTML = rows.map(c=>`<tr>
-    <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{c.archived?' <span class="status-badge archived">Archived</span>':''}}</td>
+    <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{statusBadge(c)}}</td>
     <td>${{c.brand}}</td>
     <td><span class="badge ${{c.seg}}">${{SEG_LABEL[c.seg]}}</span></td>
     <td class="num-cell">${{fmtDate(c.firstDate||c.first)}}</td>
@@ -1043,7 +1066,7 @@ function renderJChurn() {{
   const rows=base.filter(c=>jchSeg==='all'||c.seg===jchSeg);
   rows.sort((a,b)=> a.brand.localeCompare(b.brand,'uk') || a.addr.localeCompare(b.addr,'uk'));
   document.getElementById('jchTbody').innerHTML = rows.map(c=>`<tr>
-    <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{c.archived?' <span class="status-badge archived">Archived</span>':''}}</td>
+    <td class="addr-cell" title="${{c.addr}}">${{c.addr}}${{statusBadge(c)}}</td>
     <td>${{c.brand}}</td>
     <td><span class="badge ${{c.seg}}">${{SEG_LABEL[c.seg]}}</span></td>
     <td class="num-cell">${{fmtDate(c.firstDate||c.first)}}</td>

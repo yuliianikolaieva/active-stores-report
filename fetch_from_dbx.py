@@ -17,6 +17,7 @@ from databricks import sql as dbsql
 ROOT = Path(__file__).parent
 OUT = ROOT / "active_stores_from_dbx.csv"
 OUT_DATES = ROOT / "active_dates_from_dbx.csv"
+OUT_STATUS = ROOT / "active_status_from_dbx.csv"
 START = "2026-01-05"   # first Monday snapshot
 
 # Credentials come from environment (GitHub Secrets in CI). For local runs we fall
@@ -84,6 +85,28 @@ WHERE p.country_code = 'ua'
 GROUP BY p.provider_name
 """
 
+# Latest lifecycle status per store from the status-change history log, with the
+# date it entered that status and the change reason. Used to show onboarding /
+# hidden / deleted (archived) states with "since <date> · <reason>".
+STATUS_QUERY = """
+WITH latest AS (
+    SELECT provider_id, lifecycle_status, created,
+           COALESCE(ops_main_reason, lifecycle_status_change_reason) AS reason,
+           ROW_NUMBER() OVER (PARTITION BY provider_id ORDER BY created DESC) AS rn
+    FROM main.ng_delivery.provider_lifecycle_status_log
+)
+SELECT p.provider_name,
+       l.lifecycle_status,
+       DATE_FORMAT(l.created, 'yyyy-MM-dd') AS status_since,
+       l.reason AS status_reason
+FROM latest l
+JOIN main.ng_delivery.dim_provider_v2 p ON l.provider_id = p.provider_id
+WHERE l.rn = 1
+  AND p.country_code = 'ua'
+  AND p.delivery_vertical LIKE 'store%'
+ORDER BY l.created
+"""
+
 def main():
     conn = dbsql.connect(server_hostname=os.environ["DATABRICKS_HOST"],
                          http_path=f"/sql/1.0/warehouses/{os.environ['DATABRICKS_WAREHOUSE_ID']}",
@@ -110,6 +133,15 @@ def main():
         for r in drows:
             w.writerow([r[0], r[1], r[2]])
     print(f"Wrote {len(drows)} rows -> {OUT_DATES}")
+
+    cur.execute(STATUS_QUERY)
+    srows = cur.fetchall()
+    with open(OUT_STATUS, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["provider_name", "lifecycle_status", "status_since", "status_reason"])
+        for r in srows:
+            w.writerow([r[0], r[1], r[2], r[3]])
+    print(f"Wrote {len(srows)} rows -> {OUT_STATUS}")
 
     conn.close()
 
