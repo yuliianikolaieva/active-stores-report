@@ -2,8 +2,14 @@ name: Update Active Stores report
 
 on:
   schedule:
-    # 07:00 UTC every Monday = 10:00 Kyiv (EEST / summer). In winter (EET) this is 09:00 Kyiv.
-    - cron: '0 7 * * 1'
+    # Weekly refresh on Monday ~10:00 Kyiv. GitHub runs scheduled jobs best-effort
+    # (often delayed, and worst at :00), so we use an off-peak minute and two times
+    # to cover DST + act as mutual backups. The job only commits when data changed,
+    # so the extra run is a harmless no-op.
+    #   07:07 UTC = 10:07 Kyiv (EEST, summer) / 09:07 (EET, winter)
+    #   08:07 UTC = 11:07 Kyiv (EEST, summer) / 10:07 (EET, winter)
+    - cron: '7 7 * * 1'
+    - cron: '7 8 * * 1'
   workflow_dispatch: {}
 
 permissions:
