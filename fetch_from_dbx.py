@@ -18,7 +18,9 @@ ROOT = Path(__file__).parent
 OUT = ROOT / "active_stores_from_dbx.csv"
 OUT_DATES = ROOT / "active_dates_from_dbx.csv"
 OUT_STATUS = ROOT / "active_status_from_dbx.csv"
+OUT_AVAIL = ROOT / "availability_from_dbx.csv"
 START = "2026-01-05"   # first Monday snapshot
+AVAIL_START = "2026-01-01"
 
 # Credentials come from environment (GitHub Secrets in CI). For local runs we fall
 # back to a local .env (ROOT/.env) or the VARUS .env — neither is committed.
@@ -107,6 +109,30 @@ WHERE l.rn = 1
 ORDER BY l.created
 """
 
+AVAIL_QUERY = f"""
+SELECT
+    DATE_FORMAT(DATE_TRUNC('month', a.created_date), 'yyyy-MM') AS month,
+    COALESCE(NULLIF(TRIM(p.group_name), ''), p.provider_name) AS brand_name,
+    CASE
+        WHEN p.business_segment_code_v2 = 'ENT-NC' THEN 'ent'
+        WHEN p.business_segment_code_v2 = 'MM' THEN 'mm'
+        WHEN p.business_segment_code_v2 = 'SMB' THEN 'smb'
+        WHEN p.delivery_vertical = 'store_3p_ent' THEN 'ent'
+        ELSE 'smb'
+    END AS seg,
+    SUM(a.active_time) AS active_time,
+    SUM(a.working_time) AS working_time
+FROM main.ng_delivery.etl_delivery_provider_daily_availability a
+JOIN main.ng_delivery.dim_provider_v2 p ON a.provider_id = p.provider_id
+WHERE p.country_code = 'ua'
+  AND p.delivery_vertical LIKE 'store%'
+  AND a.created_date >= DATE'{AVAIL_START}'
+  AND a.created_date <= DATE_SUB(DATE_TRUNC('week', CURRENT_DATE()), 1)
+  AND a.working_time > 0
+GROUP BY 1, 2, 3
+ORDER BY 1, 2
+"""
+
 def main():
     conn = dbsql.connect(server_hostname=os.environ["DATABRICKS_HOST"],
                          http_path=f"/sql/1.0/warehouses/{os.environ['DATABRICKS_WAREHOUSE_ID']}",
@@ -142,6 +168,15 @@ def main():
         for r in srows:
             w.writerow([r[0], r[1], r[2], r[3]])
     print(f"Wrote {len(srows)} rows -> {OUT_STATUS}")
+
+    cur.execute(AVAIL_QUERY)
+    arows = cur.fetchall()
+    with open(OUT_AVAIL, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["month", "brand_name", "seg", "active_time", "working_time"])
+        for r in arows:
+            w.writerow([r[0], r[1], r[2], r[3], r[4]])
+    print(f"Wrote {len(arows)} rows -> {OUT_AVAIL}")
 
     conn.close()
 

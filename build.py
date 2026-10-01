@@ -227,6 +227,78 @@ for p in sorted(provider_weeks):
 weeks_meta = [{'w': w, 'label': f"{mshort[w[:7]]} {int(w[8:10])}"} for w in weeks]
 months_loc = [{'label': f"{mshort[ms]} {ms[:4]}", 'endIdx': week_index[month_end[ms]]} for ms in month_strs]
 
+SRC_AVAIL = BASE + "/availability_from_dbx.csv"
+
+def _pct(act, wt):
+    return round(100.0 * act / wt, 2) if wt else None
+
+avail_monthly = {mkey[ms]: {s: None for s in (*SEGS, 'total')} for ms in month_strs}
+avail_partners = []
+avail_issues = {mkey[ms]: [] for ms in month_strs}
+
+if os.path.exists(SRC_AVAIL):
+    bm = defaultdict(lambda: defaultdict(lambda: {'act': 0, 'wt': 0, 'seg': 'smb'}))
+    for r in csv.DictReader(open(SRC_AVAIL)):
+        ms = r['month']
+        if ms not in month_end:
+            continue
+        brand = re.sub(r'\s*\[Archived\]\s*', ' ', r['brand_name']).strip()
+        if not brand:
+            continue
+        act, wt = int(r['active_time']), int(r['working_time'])
+        if wt <= 0:
+            continue
+        seg = r['seg'] if r['seg'] in SEGS else 'smb'
+        rec = bm[ms][brand]
+        rec['act'] += act
+        rec['wt'] += wt
+        rec['seg'] = seg
+
+    for ms in month_strs:
+        brands = bm.get(ms, {})
+        seg_act = {s: 0 for s in SEGS}
+        seg_wt = {s: 0 for s in SEGS}
+        tot_act = tot_wt = 0
+        for brand, v in brands.items():
+            tot_act += v['act']
+            tot_wt += v['wt']
+            seg_act[v['seg']] += v['act']
+            seg_wt[v['seg']] += v['wt']
+        k = mkey[ms]
+        if tot_wt:
+            avail_monthly[k]['total'] = _pct(tot_act, tot_wt)
+        for s in SEGS:
+            if seg_wt[s]:
+                avail_monthly[k][s] = _pct(seg_act[s], seg_wt[s])
+
+        if not tot_wt:
+            continue
+        total_ratio = tot_act / tot_wt
+        issues = []
+        for brand, v in brands.items():
+            if v['wt'] < tot_wt * 0.003:
+                continue
+            br = v['act'] / v['wt']
+            drag = (total_ratio - br) * (v['wt'] / tot_wt) * 100
+            if drag <= 0.03:
+                continue
+            issues.append([
+                brand, v['seg'], _pct(v['act'], v['wt']),
+                round(100.0 * v['wt'] / tot_wt, 2), round(drag, 3),
+            ])
+        issues.sort(key=lambda x: -x[4])
+        avail_issues[k] = issues[:15]
+
+    for brand in sorted(set(b for ms in bm for b in bm[ms])):
+        segs = [bm[ms][brand]['seg'] for ms in month_strs if brand in bm.get(ms, {})]
+        seg = max(set(segs), key=segs.count) if segs else 'smb'
+        rec = {'brand': brand, 'vertical': seg}
+        for ms in month_strs:
+            v = bm.get(ms, {}).get(brand)
+            rec[mkey[ms]] = _pct(v['act'], v['wt']) if v and v['wt'] else None
+        avail_partners.append(rec)
+    avail_partners.sort(key=lambda d: (d['brand'] or '').lower())
+
 DATA = {
     'monthly': monthly, 'newStores': new_stores,
     'newBrands': {k:{kk:new_brands[k][kk] for kk in (*SEGS,'total')} for k in new_brands},
@@ -238,6 +310,7 @@ DATA = {
     'churnSince': churn_since, 'churnSinceWeeks': churn_since_weeks,
     'sinceLabel': since_label, 'fwLabel': fw_label,
     'locations': locations, 'weeksMeta': weeks_meta, 'monthsLoc': months_loc,
+    'availMonthly': avail_monthly, 'availIssues': avail_issues, 'availPartners': avail_partners,
 }
 
 # Built dynamically from the months present in the data (first month = baseline,
@@ -464,6 +537,7 @@ body = f'''<body>
   <button class="main-nav-btn" onclick="switchView('locations', this)">Active Locations</button>
   <button class="main-nav-btn" onclick="switchView('inactive', this)">Inactive Stores</button>
   <button class="main-nav-btn" onclick="switchView('inactive-jun', this)">Inactive since {since_short}</button>
+  <button class="main-nav-btn" onclick="switchView('availability', this)">Availability</button>
 </nav>
 
 <div id="view-overview" class="view active">
@@ -731,6 +805,68 @@ body = f'''<body>
         <tbody id="jchTbody"></tbody>
       </table>
       <div class="partner-table-footer" id="jchFooter"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="view-availability" class="view">
+<div class="container">
+  <div class="section">
+    <p class="section-title">Store Availability — Monthly (from January 2026)</p>
+    <p class="chart-desc" style="margin:-8px 0 16px">Availability = share of scheduled working time the store was actually online (<code>SUM(active_time) / SUM(working_time)</code>). Weighted across all active store locations in Ukraine. Partial current month uses the same date range as the rest of this report (through the last complete week).</p>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>Total Availability Trend</h3>
+        <p class="chart-desc">Portfolio-wide availability % by month</p>
+        <div class="chart-canvas-wrap"><canvas id="chartAvailTotal"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Availability by Segment</h3>
+        <p class="chart-desc">ENT · MM · SMB — same weighted definition</p>
+        <div class="chart-canvas-wrap"><canvas id="chartAvailSeg"></canvas></div>
+      </div>
+    </div>
+    <div class="all-brands-wrap" style="margin-top:16px">
+      <table class="brands-table" id="availMonthlyTable">
+        <thead><tr>
+          <th>Month</th><th>Total</th><th>ENT</th><th>MM</th><th>SMB</th>
+        </tr></thead>
+        <tbody id="availMonthlyBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="section">
+    <p class="section-title">Partners Dragging Total Availability</p>
+    <p class="chart-desc" style="margin:-8px 0 16px">Brands with low availability and meaningful share of working time. <strong>Impact</strong> ≈ percentage points subtracted from the portfolio total if that brand were at 100% (higher = bigger effect on total).</p>
+    <div class="toolbar">
+      <select class="sort-select" id="availMonth" onchange="renderAvailIssues()"></select>
+      <input class="partner-search" type="text" id="availSearch" placeholder="Search partner..." oninput="renderAvailPartnerTable()" />
+      <div class="filter-group">
+        <button class="filter-btn active-all" id="avSegAll" onclick="setAvailSeg('all',this)">All</button>
+        <button class="filter-btn" id="avSegEnt" onclick="setAvailSeg('ent',this)">ENT</button>
+        <button class="filter-btn" id="avSegMm" onclick="setAvailSeg('mm',this)">MM</button>
+        <button class="filter-btn" id="avSegSmb" onclick="setAvailSeg('smb',this)">SMB</button>
+      </div>
+      <span class="partner-count" id="availCount"></span>
+    </div>
+    <div class="churn-summary" id="availSummary" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px"></div>
+    <div class="partner-table-wrap" style="margin-bottom:16px">
+      <table class="partner-table">
+        <thead><tr>
+          <th>Brand</th><th>Seg</th><th>Availability %</th><th>Share of working time</th><th>Impact on total (pp)</th>
+        </tr></thead>
+        <tbody id="availIssuesBody"></tbody>
+      </table>
+      <div class="partner-table-footer" id="availIssuesFooter"></div>
+    </div>
+    <p class="section-title" style="margin-top:28px">Partner Availability — All Months</p>
+    <div class="partner-table-wrap">
+      <table class="partner-table">
+        <thead id="availPartnerHead"></thead>
+        <tbody id="availPartnerBody"></tbody>
+      </table>
+      <div class="partner-table-footer" id="availPartnerFooter"></div>
     </div>
   </div>
 </div>
@@ -1151,6 +1287,109 @@ function renderLocations() {{
     <div class="month-total-card" style="border-left:3px solid #78716c"><span class="mtc-label">Archived</span><div class="mtc-row"><span class="mtc-total">${{archN}}</span></div><span class="mtc-sub">removed from catalog</span></div>`;
 }}
 
+const availMonthly = DATA.availMonthly || {{}};
+const availIssues = DATA.availIssues || {{}};
+const availPartnerData = DATA.availPartners || [];
+let availSegFilter = 'all';
+
+function fmtPct(v) {{ return v == null ? '—' : v.toFixed(2) + '%'; }}
+function availCell(v, total) {{
+  if(v == null) return '<td class="num-cell zero">—</td>';
+  const cls = total != null && v < total - 5 ? ' style="color:#dc2626;font-weight:600"' : (v < 85 ? ' style="color:#b45309"' : '');
+  return `<td class="num-cell"${{cls}}>${{fmtPct(v)}}</td>`;
+}}
+
+function buildAvailCharts() {{
+  const labels = MONTHS.map(m=>m.short);
+  const totals = MK.map(k=>availMonthly[k]?.total ?? null);
+  new Chart(document.getElementById('chartAvailTotal'),{{
+    type:'line',
+    data:{{labels,datasets:[{{label:'Total',data:totals,borderColor:accentColor,backgroundColor:'rgba(26,107,67,0.08)',fill:true,tension:0.25,spanGaps:true}}]}},
+    options:{{responsive:true,maintainAspectRatio:false,plugins:{{legend:{{display:false}}}},
+      scales:{{y:{{min:60,max:100,grid:{{color:'#f0f0ef'}},ticks:{{callback:v=>v+'%'}}}},x:{{grid:{{display:false}}}}}}}}
+  }});
+  const segDS = SEGS.map(s=>({{label:SEG_LABEL[s],data:MK.map(k=>availMonthly[k]?.[s] ?? null),borderColor:COL[s],backgroundColor:COL[s],tension:0.25,spanGaps:true}}));
+  new Chart(document.getElementById('chartAvailSeg'),{{
+    type:'line',
+    data:{{labels,datasets:segDS}},
+    options:{{responsive:true,maintainAspectRatio:false,
+      scales:{{y:{{min:60,max:100,grid:{{color:'#f0f0ef'}},ticks:{{callback:v=>v+'%'}}}},x:{{grid:{{display:false}}}}}}}}
+  }});
+  document.getElementById('availMonthlyBody').innerHTML = MONTHS.map(m=>{{
+    const a = availMonthly[m.key] || {{}};
+    return `<tr>
+      <td><strong>${{m.label}}</strong>${{m.mtd?' <span class="badge new-brand">PARTIAL</span>':''}}</td>
+      ${{availCell(a.total, null)}}
+      ${{availCell(a.ent, a.total)}}
+      ${{availCell(a.mm, a.total)}}
+      ${{availCell(a.smb, a.total)}}
+    </tr>`;
+  }}).join('');
+}}
+
+function buildAvailMonthSelect() {{
+  const sel = document.getElementById('availMonth');
+  sel.innerHTML = MONTHS.slice().reverse().map(m=>`<option value="${{m.key}}">${{m.label}}${{m.mtd?' (partial)':''}}</option>`).join('');
+}}
+
+function renderAvailIssues() {{
+  const mk = document.getElementById('availMonth').value;
+  const a = availMonthly[mk] || {{}};
+  const list = (availIssues[mk] || []).filter(row=> availSegFilter==='all' || row[1]===availSegFilter);
+  document.getElementById('availIssuesBody').innerHTML = list.map(row=>`<tr>
+    <td class="partner-name" title="${{row[0]}}">${{row[0]}}</td>
+    <td><span class="badge ${{row[1]}}">${{SEG_LABEL[row[1]]}}</span></td>
+    <td class="num-cell">${{fmtPct(row[2])}}</td>
+    <td class="num-cell">${{row[3].toFixed(2)}}%</td>
+    <td class="num-cell"><strong>${{row[4].toFixed(2)}}</strong></td>
+  </tr>`).join('') || `<tr><td colspan="5" class="empty-state">No significant availability drag for this month</td></tr>`;
+  document.getElementById('availIssuesFooter').textContent = `Portfolio total ${{fmtPct(a.total)}} · showing ${{list.length}} partner${{list.length!==1?'s':''}} with the largest impact on total availability`;
+  document.getElementById('availSummary').innerHTML = `
+    <div class="month-total-card accent" style="background:var(--accent);color:#fff;border-color:var(--accent)"><span class="mtc-label" style="color:rgba(255,255,255,0.75)">Total</span><div class="mtc-row"><span class="mtc-total">${{fmtPct(a.total)}}</span></div><span class="mtc-sub" style="color:rgba(255,255,255,0.65)">all stores</span></div>
+    <div class="month-total-card" style="border-left:3px solid var(--ent)"><span class="mtc-label">ENT</span><div class="mtc-row"><span class="mtc-total">${{fmtPct(a.ent)}}</span></div></div>
+    <div class="month-total-card" style="border-left:3px solid var(--mm)"><span class="mtc-label">MM</span><div class="mtc-row"><span class="mtc-total">${{fmtPct(a.mm)}}</span></div></div>
+    <div class="month-total-card" style="border-left:3px solid var(--smb)"><span class="mtc-label">SMB</span><div class="mtc-row"><span class="mtc-total">${{fmtPct(a.smb)}}</span></div></div>`;
+}}
+
+function setAvailSeg(seg, btn) {{
+  availSegFilter = seg;
+  document.querySelectorAll('#avSegAll,#avSegEnt,#avSegMm,#avSegSmb').forEach(b=>b.className='filter-btn');
+  btn.classList.add(seg==='all'?'active-all':'active-'+seg);
+  renderAvailIssues();
+  renderAvailPartnerTable();
+}}
+
+function buildAvailPartnerHead() {{
+  let html = '<tr><th>Brand</th><th>Seg</th>';
+  MONTHS.forEach(m=>{{ html += `<th class="num-cell">${{m.short}}${{m.mtd?'*':''}}</th>`; }});
+  html += '</tr>';
+  document.getElementById('availPartnerHead').innerHTML = html;
+}}
+
+function renderAvailPartnerTable() {{
+  const search = document.getElementById('availSearch').value.toLowerCase();
+  let rows = availPartnerData.filter(d=>{{
+    if(!d.brand) return false;
+    if(availSegFilter!=='all' && d.vertical!==availSegFilter) return false;
+    if(search && !d.brand.toLowerCase().includes(search)) return false;
+    return true;
+  }});
+  rows.sort((a,b)=> a.brand.localeCompare(b.brand,'uk'));
+  document.getElementById('availPartnerBody').innerHTML = rows.map(d=>{{
+    const seg = `<span class="badge ${{d.vertical}}">${{SEG_LABEL[d.vertical]}}</span>`;
+    const cells = MK.map(k=>{{
+      const v = d[k];
+      if(v == null) return '<td class="num-cell zero">—</td>';
+      const total = availMonthly[k]?.total;
+      const low = total != null && v < total - 8;
+      return `<td class="num-cell${{low?' style=\\"color:#dc2626;font-weight:600\\"':''}}">${{fmtPct(v)}}</td>`;
+    }}).join('');
+    return `<tr><td class="partner-name" title="${{d.brand}}">${{d.brand}}</td><td>${{seg}}</td>${{cells}}</tr>`;
+  }}).join('') || `<tr><td colspan="${{2+MK.length}}" class="empty-state">No availability data — run fetch_from_dbx.py</td></tr>`;
+  document.getElementById('availCount').textContent = `${{rows.length}} partner${{rows.length!==1?'s':''}}`;
+  document.getElementById('availPartnerFooter').textContent = `Monthly partner availability % · ${{rows.length}} brands shown`;
+}}
+
 buildMonths();
 buildCharts();
 buildQuarterly();
@@ -1167,6 +1406,11 @@ buildJChart();
 renderJChurn();
 buildLocPeriodSelect();
 renderLocations();
+buildAvailCharts();
+buildAvailMonthSelect();
+renderAvailIssues();
+buildAvailPartnerHead();
+renderAvailPartnerTable();
 </script>
 </body>
 </html>'''
